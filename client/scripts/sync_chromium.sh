@@ -41,12 +41,21 @@ if [ ! -d "${DEPOT_TOOLS}/.git" ]; then
 fi
 export PATH="${DEPOT_TOOLS}:${PATH}"
 
+# depot_tools 首次初始化（CIPD bootstrap：生成 python3_bin_reldir.txt / vpython）
+# 未初始化直接调 fetch 会报 "python3_bin_reldir.txt not found" 并 exit 1
+if [ ! -f "${DEPOT_TOOLS}/python3_bin_reldir.txt" ]; then
+  echo "==> bootstrap depot_tools ..."
+  (cd "${DEPOT_TOOLS}" && ./update_depot_tools)
+  "${DEPOT_TOOLS}/gclient" --version > /dev/null 2>&1 || gclient --version > /dev/null
+fi
+
 # ---- Linux 构建依赖 ----
+# 注意：不能加 sudo -E —— 托管 Runner 的 sudoers 无 SETENV 权限，-E 会触发密码认证导致失败
 if [ ! -f "${CHROMIUM_DIR}/.deps-ready" ]; then
   if [ "$(id -u)" -eq 0 ]; then
     "${DEPOT_TOOLS}/build/install-build-deps.sh" --no-prompt || true
   elif command -v sudo >/dev/null 2>&1; then
-    sudo -E "${DEPOT_TOOLS}/build/install-build-deps.sh" --no-prompt || true
+    sudo "${DEPOT_TOOLS}/build/install-build-deps.sh" --no-prompt || true
   else
     echo "warn: no root/sudo, skip install-build-deps（托管镜像自带大部分依赖）"
   fi
