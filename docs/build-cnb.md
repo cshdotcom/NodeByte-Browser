@@ -10,12 +10,20 @@
 | GitHub | `cshdotcom/NodeByte-Browser` | 主仓；Release（源码+changelog）；docker-image.yml 发布 ghcr.io 多架构镜像；build-nodebyte-browser.yml 三平台客户端编译 |
 | CNB | `cnb.cool/<owner>/NodeByte-Browser` | 镜像同步仓；`.cnb.yml` 云原生校验/构建；web_trigger 手动重编译 |
 
+> **CNB 首次建仓说明**（实测，2026-09）：CNB 新账号存在以下限制——
+> ① 个人空间无 OpenAPI 建仓端点；② 根组织年度创建额度受限（新账号 "root
+> organization has reached its yearly creation limit"）；③ push 不支持自动建仓。
+> 因此**首次需在网页端创建一次空仓库**（不要初始化 README）：
+> `https://cnb.cool` → 新建仓库 → `NodeByte-Browser`，
+> 之后用 `scripts/push-cnb.sh` 一键推送（脚本会尝试 API 建仓/配置 remote/推送）。
+
 推送命令（本地仓库已配置双 remote 时）：
 
 ```bash
 git remote add github https://github.com/cshdotcom/NodeByte-Browser.git
-git remote add cnb    https://cnb: <CNB_TOKEN>@cnb.cool/<owner>/NodeByte-Browser.git
+git remote add cnb    https://cnb:<CNB_TOKEN>@cnb.cool/<owner>/NodeByte-Browser.git
 git push github main --tags && git push cnb main --tags
+# 或一键： CNB_TOKEN=xxx bash scripts/push-cnb.sh
 ```
 
 ## 二、CNB 流水线设计（不浪费核时）

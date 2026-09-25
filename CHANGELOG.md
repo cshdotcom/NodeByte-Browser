@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-25
+
+### Added
+- `scripts/push-cnb.sh`：CNB 一键推送脚本（自动配置 remote + 推送 main/tags，含构建入口提示）
+- docs/build-cnb.md 补充 CNB 新账号建仓实测说明（个人空间无 API 建仓端点 / 根组织年度额度限制 / push 不自动建仓 → 网页端首次建仓一次即可）
+
 ## [1.3.0] - 2026-09-25
 
 ### Added（数据批量导入体系 + 策略指令撤销 + 加速器协议矩阵 + CNB 双平台）
