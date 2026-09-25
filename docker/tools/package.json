@@ -1,0 +1,10 @@
+{
+  "name": "nodebyte-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "All-in-One 镜像内置工具（桶初始化等一次性任务）",
+  "dependencies": {
+    "minio": "^8.0.2"
+  }
+}

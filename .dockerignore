@@ -1,0 +1,14 @@
+# All-in-One 镜像构建上下文裁剪（context = 仓库根）
+.git
+.github
+client
+brand
+docs
+download
+node_modules
+**/node_modules
+server/.next
+server/node_modules
+server/tsconfig.tsbuildinfo
+server/.env
+server/.env.local

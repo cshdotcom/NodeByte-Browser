@@ -2,7 +2,32 @@
 
 > 目标：`bsync.nodebyte.cn` 公网可访问；业务接口按登录态 + 2FA 绑定态鉴权（服务端提示词 4.1）。
 
-## 1. 一键部署（Docker Compose）
+## 0. All-in-One 单容器部署（推荐）
+
+全部服务嵌在**一个镜像**内（PostgreSQL + MinIO + WS 信令 + Web + Nginx 入口），一条命令直接部署：
+
+```bash
+docker run -d --name nodebyte -p 8080:8080 \
+  -v nodebyte-data:/data \
+  -e ADMIN_PASSWORD='请改强密码' \
+  ghcr.io/cshdotcom/nodebyte-server:latest
+# 打开 http://localhost:8080
+```
+
+要点：
+
+| 事项 | 说明 |
+|---|---|
+| 数据卷 | `/data`（PG 数据 + MinIO 对象 + 自动密钥），备份即 `tar` 该卷 |
+| 密钥 | `JWT_SECRET`/`DATABASE_PASSWORD`/`MINIO_ROOT_PASSWORD`/`INTERNAL_SHARED_SECRET` 留空 → 首启自动生成并持久化 `/data/secrets/` |
+| 入口 | 容器内唯一端口 `8080`：Web/API `/`、WS `/ws`、七个桶名直出（预签名直传/直下）、`/healthz` |
+| 远程直传 | 反代/公网域名部署时设 `MINIO_ENDPOINT=<域名>`、`MINIO_PORT=<对外端口>`、`MINIO_USE_SSL=true` |
+| 升级 | 拉新镜像重建容器；schema 指纹变化自动重放 DDL（init.sql 全幂等） |
+| 完整变量 | 见仓库根 `.env.docker.example`，`docker run --env-file .env ...` |
+
+架构：Nginx(:8080) → Next.js(:3000) / ws-service(:8081) / MinIO(:9000，仅桶名反代)；PostgreSQL(:5432) 由业务服务内网直连；六进程由 supervisord 托管、日志透出 `docker logs`。
+
+## 1. 分体部署（Docker Compose）
 
 ```bash
 cd server

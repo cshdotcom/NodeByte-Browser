@@ -1,4 +1,4 @@
-# NodeByte Browser Build（chromium-build）
+# NodeByte Browser（NodeByte-Browser）
 
 > NodeByte Browser 一体化构建仓库：**Chromium 二次开发客户端**（补丁式构建）+ **NodeByte Server 服务端后台**（Next.js）。
 > 本仓库遵循「低侵入 Chromium 架构」与「补丁差分构建策略」：仓库**不存放 Chromium 源码**，只存放补丁、GN 参数、构建脚本与完整服务端工程，由 GitHub Actions 完成编译与验证。
@@ -6,14 +6,15 @@
 ## 仓库结构
 
 ```
-chromium-build/
+NodeByte-Browser/
 ├── client/                    # NodeByte Browser 客户端（Chromium 二次开发）
 │   ├── src-nodebyte/          # 自研业务源码（低侵入，全部新文件，C++/Mojo）
 │   ├── webui/                 # nodebyte:// 内置页面（登录 / Drop 侧边栏 / 设置 / 离线小游戏）
 │   ├── patches/               # 由 gen_patches.sh 生成的补丁集（按序号应用）
 │   ├── gn/                    # GN 构建参数（开发版 / PC 发布版 / Android 发布版）
 │   ├── scripts/               # sync / patch / build / package 全流程脚本
-│   └── installer/             # Windows Inno Setup 安装脚本
+│   ├── branding/              # 品牌：Android 启动器图标 / 主图标
+│   └── installer/             # Windows Inno Setup 安装脚本（含品牌 .ico）
 ├── server/                    # NodeByte Server（Next.js standalone 后台）
 │   ├── src/app/api/           # 全部 REST API（认证/策略/同步/Drop/协作/管理）
 │   ├── src/lib/               # 核心库（JWT/TOTP/AES-GCM、策略合并、配额、审计、MinIO）
@@ -22,8 +23,10 @@ chromium-build/
 │   ├── ws-service/            # WebSocket 信令服务（独立部署，附录D 协议）
 │   ├── sql/                   # PostgreSQL 初始化 DDL（附录B，可直接执行）
 │   └── Dockerfile / docker-compose.yml
+├── docker/                    # All-in-One 单容器镜像编排（entrypoint/supervisord/nginx/建桶）
+├── brand/                     # 品牌图标「字节光轨」母版与设计说明
 ├── docs/                      # 架构、编译、部署、策略字典、接口契约、路线图
-└── .github/workflows/         # 服务端 CI（托管 Runner）/ 客户端校验 / 自托管编译
+└── .github/workflows/         # 服务端 CI / Docker 镜像发布 / 客户端校验 / 云端直编
 ```
 
 ## 两大组成部分
@@ -59,7 +62,33 @@ chromium-build/
 
 ## 快速开始
 
-### 跑通服务端（本地 5 分钟）
+### 方式一：All-in-One 单容器一键部署（推荐）
+
+全部服务（PostgreSQL + 对象存储 + WebSocket 信令 + Web 前台/后台/个人中心/登录页）嵌在**一个镜像**内，唯一入口 `:8080`，数据落 `/data` 卷：
+
+```bash
+# 零配置起步（所有密钥留空则首启自动生成强随机值并持久化）
+docker run -d --name nodebyte -p 8080:8080 \
+  -v nodebyte-data:/data \
+  -e ADMIN_PASSWORD='请改强密码' \
+  ghcr.io/cshdotcom/nodebyte-server:latest
+
+# 打开 http://localhost:8080 → 登录页（管理员 admin@nodebyte.cn）
+```
+
+完整配置（端口/密钥/域名/配额/SMTP/远程直传域名等）见 [.env.docker.example](.env.docker.example)：
+
+```bash
+cp .env.docker.example .env   # 按需修改
+docker run -d --name nodebyte --env-file .env -p 8080:8080 \
+  -v nodebyte-data:/data ghcr.io/cshdotcom/nodebyte-server:latest
+```
+
+- 镜像双架构：`linux/amd64` + `linux/arm64`
+- 升级：拉新镜像重启即可（数据库 schema 指纹变化自动迁移，数据卷不动）
+- 备份：`docker run --rm -v nodebyte-data:/data -v $PWD:/bak alpine tar czf /bak/nodebyte-data.tgz /data`
+
+### 方式二：docker compose 分体部署
 
 ```bash
 cd server

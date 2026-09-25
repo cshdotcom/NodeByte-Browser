@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-25
+
+### Added（All-in-One 服务端镜像 + 全新品牌图标）
+- **服务端 All-in-One 单容器镜像**（`Dockerfile` + `docker/` 编排四件套）：
+  - 一个镜像内嵌全部服务：**PostgreSQL + MinIO 对象存储 + WebSocket 信令 + Next.js Web（前台/后台/个人中心/登录页）+ Nginx 统一入口**，`docker run` 一条命令直接部署
+  - 进程管家 supervisord 按优先级托管六进程，日志全部透出 `docker logs`
+  - 数据层挂载：`/data` 卷承载 PG 数据 / MinIO 对象 / 自动生成的密钥，备份该卷即备份全部状态；`VOLUME` 声明 + 升级/回滚不丢数据
+  - **首启全自动初始化**（幂等，重启/升级安全重跑）：initdb → 建用户/库 → 应用 DDL（schema 指纹变化自动重跑）→ 七业务桶创建 → 管理员账号引导
+  - **密钥零配置**：`JWT_SECRET` / `DATABASE_PASSWORD` / `MINIO_ROOT_PASSWORD` / `INTERNAL_SHARED_SECRET` 留空时自动生成 40 位强随机值并持久化到 `/data/secrets/`
+  - 单端口统一入口 `:8080`（Nginx）：Web/API `/`、WebSocket 信令 `/ws`（升级头透传）、**七个 S3 桶名直出反代**（预签名直传/直下保留 Host 头，SigV4 校验兼容，Drop 大文件流式转发、`client_max_body_size 2048m`）、`/healthz` 健康检查
+  - 全量 `.env` 配置：`.env.docker.example` 覆盖端口、密钥、域名、配额、SMTP、远程直传域名等，`docker run --env-file` 直接用
+  - 双架构镜像：`linux/amd64` + `linux/arm64`
+- **Docker 镜像发布流水线**（`.github/workflows/docker-image.yml`）：Buildx 多架构构建，推送到 `ghcr.io/cshdotcom/nodebyte-server`；`main` 分支 → `main` 标签，tag `v1.2.0` → `1.2.0`/`1.2`/`latest`，PR 仅构建验证
+- **全新原创品牌图标「字节光轨 The Signal Trail」**（`brand/`）：
+  - 概念：极光色光轨（青 `#22D3EE` → 蓝 `#4F7DFF` → 紫 `#A855F7`）一笔画出字母 **N**，三个转折点是发光的**节点（Node）**，收笔处一颗**字节光点**拖着尾迹飞离轨道，右上一段淡轨道弧呼应互联网络
+  - 矢量母版 `icon-master.svg` + 全尺寸位图 16→512px + `favicon.ico`（16/32/48 合成）+ 横版字标 `logo-horizontal.svg`，逐级简化保证小尺寸可辨识（16px 仍清晰）
+  - 全量接入：Web 端 favicon/PWA/OG 图（`server/public/`）、登录页品牌位（内联 SVG）、Windows 安装器图标（`client/installer/branding/nodebyte.ico`）、Android 启动器五密度（`client/branding/android/`）
+  - `brand/README.md` 记录设计理念与再生成脚本
+
+### Changed
+- 登录页品牌位：`NB` 文字占位替换为「字节光轨」图标，容器底色与母版一致
+- `server/src/app/layout.tsx`：补全 favicon / apple-touch-icon / OpenGraph 图标元数据
+- README：部署章节重写（方式一 All-in-One 一键部署 / 方式二 compose 分体）、仓库结构图更新
+
 ## [1.1.0] - 2026-09-25
 
 ### Added（云端直编 + 产品本地化）

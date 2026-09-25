@@ -26,3 +26,4 @@ client/chromium/
 .vscode/
 *.swp
 server/tsconfig.tsbuildinfo
+node_modules/
