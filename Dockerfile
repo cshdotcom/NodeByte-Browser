@@ -1,11 +1,11 @@
 # =====================================================================
 # NodeByte Server —— All-in-One 单容器镜像
-# 内嵌：PostgreSQL + MinIO(对象存储) + WebSocket 信令 + Web(API/前台/后台/个人中心) + Nginx 统一入口
+# 内嵌：PostgreSQL + RustFS(S3 兼容对象存储) + WebSocket 信令 + Web(API/前台/后台/个人中心) + Nginx 统一入口
 #
 # 一键部署：
 #   docker run -d --name nodebyte -p 8080:8080 -v nodebyte-data:/data \
 #     -e ADMIN_PASSWORD='强管理密码' ghcr.io/cshdotcom/nodebyte-server:latest
-# 数据全部落 /data（PG + MinIO + 密钥），备份即备份该卷。
+# 数据全部落 /data（PG + 对象存储 + 密钥），备份即备份该卷。
 # 环境变量清单见 .env.docker.example —— 所有端口、密钥、域名、配额、SMTP 均可配置。
 # =====================================================================
 
@@ -28,18 +28,19 @@ FROM node:20-bookworm-slim AS runtime
 ARG TARGETARCH
 
 # 系统依赖：PostgreSQL（发行版仓库版）+ Nginx 入口 + Supervisor 进程管家
-# MinIO 使用官方静态二进制（amd64/arm64 双架构支持）
+# 对象存储：RustFS 1.0（Apache 2.0，S3 兼容，MinIO API 替代；静态二进制双架构）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        postgresql postgresql-contrib nginx supervisor curl ca-certificates tzdata \
+        postgresql postgresql-contrib nginx supervisor unzip curl ca-certificates tzdata \
     && case "${TARGETARCH}" in \
-           amd64) MINIO_ARCH="linux-amd64" ;; \
-           arm64) MINIO_ARCH="linux-arm64" ;; \
+           amd64) RUSTFS_ARCH="x86_64" ;; \
+           arm64) RUSTFS_ARCH="aarch64" ;; \
            *) echo "unsupported TARGETARCH=${TARGETARCH}" && exit 1 ;; \
        esac \
-    && curl -fsSL "https://dl.min.io/server/minio/release/${MINIO_ARCH}/minio" \
-        -o /usr/local/bin/minio \
-    && chmod 0755 /usr/local/bin/minio \
-    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL "https://github.com/rustfs/rustfs/releases/download/1.0.0/rustfs-linux-${RUSTFS_ARCH}-musl-v1.0.0.zip" \
+        -o /tmp/rustfs.zip \
+    && unzip -o -j /tmp/rustfs.zip "rustfs" -d /usr/local/bin/ \
+    && chmod 0755 /usr/local/bin/rustfs \
+    && rm -rf /var/lib/apt/lists/* /tmp/rustfs.zip \
     && rm -f /etc/nginx/sites-enabled/default
 
 # ws-service 与桶初始化工具的依赖（纯 JS 包，无原生编译，双架构通用）
@@ -65,10 +66,10 @@ COPY --from=build /build/scripts /app/scripts
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/nodebyte.conf
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod 0755 /entrypoint.sh /usr/local/bin/minio \
+RUN chmod 0755 /entrypoint.sh /usr/local/bin/rustfs \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime || true
 
-# 统一入口端口（PG/MinIO/WS/Web 仅监听 127.0.0.1，不对外）
+# 统一入口端口（PG/RustFS/WS/Web 仅监听 127.0.0.1，不对外）
 EXPOSE 8080
 VOLUME ["/data"]
 

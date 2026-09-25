@@ -37,19 +37,25 @@ ensure_secret() {
 ensure_secret JWT_SECRET                "$SECRETS/jwt_secret"
 ensure_secret INTERNAL_SHARED_SECRET    "$SECRETS/internal_secret"
 ensure_secret DATABASE_PASSWORD         "$SECRETS/db_password"
-ensure_secret MINIO_ROOT_PASSWORD       "$SECRETS/minio_password"
-export MINIO_ROOT_USER="${MINIO_ROOT_USER:-${MINIO_ACCESS_KEY:-nodebyte}}"
+ensure_secret MINIO_ROOT_PASSWORD       "$SECRETS/rustfs_password"
+export S3_ROOT_USER="${MINIO_ROOT_USER:-${MINIO_ACCESS_KEY:-nodebyte}}"
+export S3_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-${MINIO_SECRET_KEY:-}}"
 
 export DATABASE_URL="${DATABASE_URL:-postgres://${PG_USER}:${DATABASE_PASSWORD}@127.0.0.1:5432/${PG_DB}}"
 export JWT_SECRET="${JWT_SECRET}"                     # 供 supervisord 子进程继承
 export INTERNAL_SHARED_SECRET="${INTERNAL_SHARED_SECRET}"
 export WS_PORT="${WS_PORT:-8081}"
 export WS_SERVICE_URL="${WS_SERVICE_URL:-http://127.0.0.1:8081}"
+# 内嵌 RustFS（S3 兼容）进程端凭据/地址
+export RUSTFS_ACCESS_KEY="${S3_ROOT_USER}"
+export RUSTFS_SECRET_KEY="${S3_ROOT_PASSWORD}"
+export RUSTFS_ADDRESS="127.0.0.1:9000"
+# 应用端（Next.js / ensure-buckets 走 minio SDK）凭据与地址
 export MINIO_ENDPOINT="${MINIO_ENDPOINT:-127.0.0.1}"
 export MINIO_PORT="${MINIO_PORT:-9000}"
 export MINIO_USE_SSL="${MINIO_USE_SSL:-false}"
-export MINIO_ACCESS_KEY="${MINIO_ROOT_USER}"
-export MINIO_SECRET_KEY="${MINIO_ROOT_PASSWORD}"
+export MINIO_ACCESS_KEY="${S3_ROOT_USER}"
+export MINIO_SECRET_KEY="${S3_ROOT_PASSWORD}"
 export PORT=3000          # Next.js 内部端口固定 3000（对外端口由 docker -p / 反代决定）
 export HOSTNAME="127.0.0.1"
 export NODE_ENV="production"

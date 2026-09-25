@@ -1,4 +1,4 @@
-# NodeByte Server 一键部署：PostgreSQL + MinIO + WS 信令 + Next.js standalone
+# NodeByte Server 一键部署：PostgreSQL + RustFS(S3兼容) + WS 信令 + Next.js standalone
 # 用法：
 #   cp .env.example .env && 修改密钥
 #   docker compose up -d
@@ -20,32 +20,30 @@ services:
       timeout: 3s
       retries: 12
 
-  minio:
-    image: minio/minio:latest
+  # S3 兼容对象存储（RustFS，Apache 2.0；minio SDK / mc 客户端完全兼容）
+  s3:
+    image: rustfs/rustfs:latest
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      RUSTFS_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      RUSTFS_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      RUSTFS_ADDRESS: ":9000"
     ports:
       - "9000:9000"
-      - "9001:9001"
     volumes:
-      - miniodata:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
+      - s3data:/data
 
   # 七个业务桶自动初始化（drop-files/screenshots/sync-blobs/extension-pool/doc-snapshots/recordings/avatars）
-  minio-init:
+  # 内置等待重试，不依赖 s3 镜像内含健康检查工具
+  s3-init:
     image: minio/mc:latest
     depends_on:
-      minio: { condition: service_healthy }
+      - s3
     entrypoint: >
       /bin/sh -c "
-      mc alias set nb http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin};
+      until mc alias set nb http://s3:9000 $${MINIO_ACCESS_KEY:-minioadmin} $${MINIO_SECRET_KEY:-minioadmin}; do
+        echo 'waiting for s3...'; sleep 2;
+      done;
       for b in drop-files screenshots sync-blobs extension-pool doc-snapshots recordings avatars; do
         mc mb --ignore-existing nb/$$b;
       done;
@@ -78,7 +76,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-value}
       INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:-change-me-internal-secret}
       WS_SERVICE_URL: http://ws-service:8081
-      MINIO_ENDPOINT: minio
+      MINIO_ENDPOINT: s3
       MINIO_PORT: 9000
       MINIO_USE_SSL: "false"
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
@@ -91,9 +89,8 @@ services:
       - "3000:3000"
     depends_on:
       postgres: { condition: service_healthy }
-      minio: { condition: service_healthy }
       ws-service: { condition: service_started }
 
 volumes:
   pgdata:
-  miniodata:
+  s3data:

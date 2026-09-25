@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-25
+
+### Fixed（对象存储切换 RustFS —— 首个可用的 All-in-One 镜像）
+- **内嵌对象存储由 MinIO 官方二进制切换为 RustFS 1.0.0**（Apache 2.0，S3 兼容，MinIO API 直接替代）：
+  - 原因：MinIO 已于 2025 年停止社区二进制分发（`dl.min.io` 全线返回 410 Gone），官方镜像与下载源均不可用于新部署
+  - RustFS 为纯 HTTP/S3 单进程（无 gRPC 集群拓扑），musl 静态二进制 `x86_64` + `aarch64` 双架构开箱即用
+  - **应用端零改动**：`minio` SDK 客户端直连 RustFS；已实测验证七桶创建、SigV4 预签名 PUT/GET、listBuckets 全链路 200
+  - 凭据统一走 `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`（entrypoint 自动映射为 RustFS 进程端与应用端两套变量）
+- `server/docker-compose.yml` 分体部署同步切换：`minio` 容器 → `rustfs/rustfs:latest`（双架构），`s3-init` 内置等待重试（不依赖镜像内健康检查工具）
+- README / docs/deploy-server.md 措辞同步更新（S3 桶规划、架构图、部署说明）
+
 ## [1.2.0] - 2026-09-25
 
 ### Added（All-in-One 服务端镜像 + 全新品牌图标）

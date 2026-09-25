@@ -17,7 +17,7 @@ NodeByte-Browser/
 │   └── installer/             # Windows Inno Setup 安装脚本（含品牌 .ico）
 ├── server/                    # NodeByte Server（Next.js standalone 后台）
 │   ├── src/app/api/           # 全部 REST API（认证/策略/同步/Drop/协作/管理）
-│   ├── src/lib/               # 核心库（JWT/TOTP/AES-GCM、策略合并、配额、审计、MinIO）
+│   ├── src/lib/               # 核心库（JWT/TOTP/AES-GCM、策略合并、配额、审计、S3 兼容存储）
 │   ├── src/app/(web)          # 前台登录 + 网页个人中心
 │   ├── src/app/admin          # 管理员后台
 │   ├── ws-service/            # WebSocket 信令服务（独立部署，附录D 协议）
@@ -47,7 +47,7 @@ NodeByte-Browser/
 - 组织能力：用户组、云配额、策略集（mandatory/recommended/sensitiveFields）、`GET /api/client/policy` 合并下发
 - 业务闭环：加密同步 API、Drop（消息/文件/标签页推送/Cookie 会话上下文分享与撤销）、协作会话、扩展强制下发
 - 安全基线：**后端不信任前端**、明文密码/Cookie 绝不入库、审计日志不可改删、管理员查看用户文件二次密码鉴权（15 分钟会话）
-- 部署：Next.js standalone + PostgreSQL + MinIO + 独立 WebSocket 信令服务（`docker compose up` 一键拉起）
+- 部署：Next.js standalone + PostgreSQL + RustFS(S3 兼容) + 独立 WebSocket 信令服务（`docker compose up` 一键拉起）
 
 业务状态码（客户端/服务端一致约定）：
 
@@ -93,7 +93,7 @@ docker run -d --name nodebyte --env-file .env -p 8080:8080 \
 ```bash
 cd server
 cp .env.example .env            # 按需修改
-docker compose up -d            # PostgreSQL + MinIO + WS 信令 + NodeByte Server
+docker compose up -d            # PostgreSQL + RustFS + WS 信令 + NodeByte Server
 # 初始化：建库表 + 管理员账号（见 docs/deploy-server.md）
 ```
 
@@ -112,7 +112,7 @@ docker compose up -d            # PostgreSQL + MinIO + WS 信令 + NodeByte Serv
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | 总体架构、业务主链路、低侵入原则、状态码约定 |
 | [docs/build-client.md](docs/build-client.md) | 自托管 Runner 搭建与 Chromium 编译全流程 |
-| [docs/deploy-server.md](docs/deploy-server.md) | 服务端部署（Docker/环境变量/MinIO 桶/反代） |
+| [docs/deploy-server.md](docs/deploy-server.md) | 服务端部署（All-in-One/compose、环境变量、S3 桶、反代） |
 | [docs/policy-dictionary.md](docs/policy-dictionary.md) | 全部策略键与客户端执行点对照 |
 | [docs/api-contract.md](docs/api-contract.md) | 接口契约与 WebSocket 信令协议 |
 | [docs/roadmap.md](docs/roadmap.md) | v0.1 → v1.5 迭代路线 |
