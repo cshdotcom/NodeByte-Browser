@@ -1,0 +1,469 @@
+diff --git a/chrome/browser/nodebyte/import/data_importer.cc b/chrome/browser/nodebyte/import/data_importer.cc
+new file mode 100644
+index 0000000..481f784
+--- /dev/null
++++ b/chrome/browser/nodebyte/import/data_importer.cc
+@@ -0,0 +1,347 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// DataImporter 实现 —— 见 data_importer.h 文件头（双通道体系说明）。
++//
++// CSV 解析规则与 server/src/lib/csv.ts 保持同源（RFC-4180：引号转义、
++// 字段内逗号/换行、BOM、CRLF），列别名一致：
++//   密码：url/login_uri/website, username/login_username/account, password/login_password, name/title
++//   书签：title/name, url/link, folder/path/category（"/" 分层）, date_added
++//   历史：url, title, last_visit_time/time, visit_count/count
++//
++// 写入目标（本机加密）：
++//   密码 → PasswordStore::AddLogin（PasswordForm origin/signon_realm 规范化）
++//   书签 → BookmarkModel::AddURL / AddFolder（folder 按 "/" 逐级创建/复用）
++//   历史 → HistoryService::AddPage（URL 去重，同日合并 visit_count）
++
++#include "chrome/browser/nodebyte/import/data_importer.h"
++
++#include <map>
++#include <utility>
++
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/time/time.h"
++#include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/password_manager/password_store_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/bookmarks/bookmark_model_factory.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++#include "chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h"
++#include "chrome/browser/nodebyte/sync/nodebyte_sync_client.h"
++#include "components/bookmarks/browser/bookmark_model.h"
++#include "components/bookmarks/browser/bookmark_node.h"
++#include "components/history/core/browser/history_service.h"
++#include "components/password_manager/core/browser/password_store/password_store.h"
++#include "components/password_manager/core/browser/password_store/password_store_change.h"
++#include "url/gurl.h"
++
++namespace nodebyte {
++
++namespace {
++
++// ---- 极简 RFC-4180 解析（与服务端 csv.ts 同源）----
++std::vector<std::vector<std::string>> ParseCsvRows(const std::string& text) {
++  std::string t = text;
++  if (!t.empty() && static_cast<unsigned char>(t[0]) == 0xEF) {
++    // UTF-8 BOM (EF BB BF)
++    if (t.size() >= 3 && static_cast<unsigned char>(t[1]) == 0xBB &&
++        static_cast<unsigned char>(t[2]) == 0xBF) {
++      t = t.substr(3);
++    }
++  }
++  std::vector<std::vector<std::string>> rows;
++  std::vector<std::string> row;
++  std::string field;
++  bool in_quotes = false;
++  for (size_t i = 0; i < t.size(); ++i) {
++    const char ch = t[i];
++    if (in_quotes) {
++      if (ch == '"') {
++        if (i + 1 < t.size() && t[i + 1] == '"') { field += '"'; ++i; continue; }
++        in_quotes = false;
++        continue;
++      }
++      field += ch;
++      continue;
++    }
++    if (ch == '"') { in_quotes = true; continue; }
++    if (ch == ',') { row.push_back(field); field.clear(); continue; }
++    if (ch == '\r') continue;
++    if (ch == '\n') { row.push_back(field); rows.push_back(row); row.clear(); field.clear(); continue; }
++    field += ch;
++  }
++  if (!row.empty() || !field.empty()) { row.push_back(field); rows.push_back(row); }
++  return rows;
++}
++
++int ColumnIndex(const std::vector<std::string>& header,
++                const std::vector<std::string>& aliases) {
++  for (const std::string& alias : aliases) {
++    for (size_t i = 0; i < header.size(); ++i) {
++      if (base::ToLowerASCII(base::TrimWhitespaceASCII(header[i], base::TRIM_ALL)) == alias) {
++        return static_cast<int>(i);
++      }
++    }
++  }
++  return -1;
++}
++
++base::Time ParseFlexibleTime(const std::string& s) {
++  std::string v = base::TrimWhitespaceASCII(s, base::TRIM_ALL);
++  if (v.empty()) return base::Time();
++  int64_t n = 0;
++  if (base::StringToInt64(v, &n)) {
++    if (n > 100000000000000LL) return base::Time::FromWebKitTime(n);   // 微秒
++    if (n > 1000000000LL) return base::Time::FromSecondsSinceUnixEpoch(
++        static_cast<double>(n));
++    return base::Time();
++  }
++  base::Time out;
++  if (base::Time::FromString(v.c_str(), &out)) return out;
++  return base::Time();
++}
++
++bool LooksLikeUrl(const std::string& s) {
++  std::string v = base::TrimWhitespaceASCII(s, base::TRIM_ALL);
++  if (v.empty()) return false;
++  if (base::StartsWith(v, "http://", base::CompareCase::INSENSITIVE_ASCII) ||
++      base::StartsWith(v, "https://", base::CompareCase::INSENSITIVE_ASCII)) return true;
++  return v.find('.') != std::string::npos;
++}
++
++std::string NormalizeOrigin(const std::string& url) {
++  GURL g(url.find("://") == std::string::npos ? "https://" + url : url);
++  return g.IsValid() ? g.spec() : url;
++}
++
++}  // namespace
++
++DataImporter::DataImporter(Profile* profile) : profile_(profile) {}
++DataImporter::~DataImporter() = default;
++
++bool DataImporter::PolicyAllows(ImportDataType type) const {
++  const char* key = nullptr;
++  switch (type) {
++    case ImportDataType::kPasswords: key = "nodebyte.policy.import_passwords_allowed"; break;
++    case ImportDataType::kBookmarks: key = "nodebyte.policy.import_bookmarks_allowed"; break;
++    case ImportDataType::kHistory:   key = "nodebyte.policy.import_history_allowed"; break;
++  }
++  return profile_->GetPrefs()->GetBoolean(key);
++}
++
++ImportSummary DataImporter::ImportPasswordsCsv(const std::string& csv_text) {
++  ImportSummary s;
++  s.type = ImportDataType::kPasswords;
++  if (!PolicyAllows(s.type)) {
++    s.error = "policy: NodeByteImportPasswordsAllowed=false";
++    return s;
++  }
++  auto rows = ParseCsvRows(csv_text);
++  if (rows.size() < 2) { s.error = "csv empty"; return s; }
++
++  const int url_i = ColumnIndex(rows[0], {"url", "login_uri", "uri", "website", "address", "server", "网址", "url地址"});
++  const int user_i = ColumnIndex(rows[0], {"username", "login_username", "user", "account", "login", "用户名", "账号"});
++  const int pass_i = ColumnIndex(rows[0], {"password", "login_password", "pwd", "密码"});
++  const int name_i = ColumnIndex(rows[0], {"name", "title", "hostname", "名称", "标题"});
++  if (url_i < 0 || user_i < 0 || pass_i < 0) { s.error = "columns not recognized (need url/username/password)"; return s; }
++
++  std::vector<ImportedPasswordRow> out;
++  for (size_t i = 1; i < rows.size(); ++i) {
++    const auto& r = rows[i];
++    if (r.size() <= static_cast<size_t>(url_i)) continue;
++    ImportedPasswordRow p;
++    p.url = base::TrimWhitespaceASCII(r[url_i], base::TRIM_ALL);
++    p.username = user_i >= 0 && r.size() > static_cast<size_t>(user_i)
++                     ? base::TrimWhitespaceASCII(r[user_i], base::TRIM_ALL) : "";
++    p.password = pass_i >= 0 && r.size() > static_cast<size_t>(pass_i)
++                     ? base::TrimWhitespaceASCII(r[pass_i], base::TRIM_ALL) : "";
++    p.origin = name_i >= 0 && r.size() > static_cast<size_t>(name_i)
++                   ? base::TrimWhitespaceASCII(r[name_i], base::TRIM_ALL) : "";
++    if (p.url.empty() && p.username.empty() && p.password.empty()) continue;
++    s.total_rows++;
++    out.push_back(std::move(p));
++  }
++  return WritePasswords(std::move(out));
++}
++
++ImportSummary DataImporter::ImportBookmarksCsv(const std::string& csv_text) {
++  ImportSummary s;
++  s.type = ImportDataType::kBookmarks;
++  if (!PolicyAllows(s.type)) { s.error = "policy: NodeByteImportBookmarksAllowed=false"; return s; }
++  auto rows = ParseCsvRows(csv_text);
++  if (rows.size() < 2) { s.error = "csv empty"; return s; }
++  const int url_i = ColumnIndex(rows[0], {"url", "link", "uri", "网址", "链接"});
++  const int title_i = ColumnIndex(rows[0], {"title", "name", "标题", "名称"});
++  const int folder_i = ColumnIndex(rows[0], {"folder", "path", "category", "文件夹", "目录", "分类"});
++  const int date_i = ColumnIndex(rows[0], {"date_added", "date", "created", "添加时间", "创建时间"});
++  if (url_i < 0) { s.error = "columns not recognized (need url)"; return s; }
++
++  std::vector<ImportedBookmarkRow> out;
++  for (size_t i = 1; i < rows.size(); ++i) {
++    const auto& r = rows[i];
++    if (r.size() <= static_cast<size_t>(url_i)) continue;
++    ImportedBookmarkRow b;
++    b.url = base::TrimWhitespaceASCII(r[url_i], base::TRIM_ALL);
++    if (b.url.empty()) continue;
++    b.title = title_i >= 0 && r.size() > static_cast<size_t>(title_i)
++                  ? base::TrimWhitespaceASCII(r[title_i], base::TRIM_ALL) : "";
++    b.folder = folder_i >= 0 && r.size() > static_cast<size_t>(folder_i)
++                   ? base::TrimWhitespaceASCII(r[folder_i], base::TRIM_ALL) : "";
++    b.date_added = 0;
++    if (date_i >= 0 && r.size() > static_cast<size_t>(date_i)) {
++      b.date_added = ParseFlexibleTime(r[date_i]).ToWebKitTime();
++    }
++    s.total_rows++;
++    out.push_back(std::move(b));
++  }
++  return WriteBookmarks(std::move(out));
++}
++
++ImportSummary DataImporter::ImportHistoryCsv(const std::string& csv_text) {
++  ImportSummary s;
++  s.type = ImportDataType::kHistory;
++  if (!PolicyAllows(s.type)) { s.error = "policy: NodeByteImportHistoryAllowed=false"; return s; }
++  auto rows = ParseCsvRows(csv_text);
++  if (rows.size() < 2) { s.error = "csv empty"; return s; }
++  const int url_i = ColumnIndex(rows[0], {"url", "link", "网址", "链接"});
++  const int title_i = ColumnIndex(rows[0], {"title", "name", "标题", "名称"});
++  const int time_i = ColumnIndex(rows[0], {"last_visit_time", "visited_at", "visit_time", "time", "date", "访问时间"});
++  const int count_i = ColumnIndex(rows[0], {"visit_count", "count", "visits", "次数"});
++  if (url_i < 0) { s.error = "columns not recognized (need url)"; return s; }
++
++  std::vector<ImportedHistoryRow> out;
++  for (size_t i = 1; i < rows.size(); ++i) {
++    const auto& r = rows[i];
++    if (r.size() <= static_cast<size_t>(url_i)) continue;
++    ImportedHistoryRow h;
++    h.url = base::TrimWhitespaceASCII(r[url_i], base::TRIM_ALL);
++    if (h.url.empty()) continue;
++    h.title = title_i >= 0 && r.size() > static_cast<size_t>(title_i)
++                  ? base::TrimWhitespaceASCII(r[title_i], base::TRIM_ALL) : "";
++    h.visited_at = time_i >= 0 && r.size() > static_cast<size_t>(time_i)
++                       ? ParseFlexibleTime(r[time_i]).ToWebKitTime() : 0;
++    if (count_i >= 0 && r.size() > static_cast<size_t>(count_i)) {
++      base::StringToInt(base::TrimWhitespaceASCII(r[count_i], base::TRIM_ALL), &h.visit_count);
++    }
++    if (h.visit_count < 1) h.visit_count = 1;
++    s.total_rows++;
++    out.push_back(std::move(h));
++  }
++  return WriteHistory(std::move(out));
++}
++
++ImportSummary DataImporter::WritePasswords(std::vector<ImportedPasswordRow> rows) {
++  ImportSummary s;
++  s.type = ImportDataType::kPasswords;
++  password_manager::PasswordStore* store =
++      static_cast<password_manager::PasswordStore*>(
++          PasswordStoreFactory::GetForProfile(profile_, ServiceAccessType::EXPLICIT_ACCESS)
++              .get());
++  if (!store) { s.error = "no password store"; return s; }
++  for (auto& row : rows) {
++    if (!LooksLikeUrl(row.url)) { s.skipped++; continue; }
++    password_manager::PasswordForm form;
++    form.url = GURL(NormalizeOrigin(row.url));
++    form.signon_realm = form.url.DeprecatedGetOriginAsURL().spec();
++    form.username_value = base::UTF8ToUTF16(row.username);
++    form.password_value = base::UTF8ToUTF16(row.password);
++    form.display_name = base::UTF8ToUTF16(row.origin);
++    // 同步方向：NodeByte 自定义同步（EXTENSION_BLOB 同级的 PASSWORDS 类型）
++    // 本机 PasswordStore 落库后由 NodeByteSyncClient 增量加密上传。
++    store->AddLogin(std::move(form), /*changes=*/nullptr);
++    s.imported++;
++  }
++  return s;
++}
++
++ImportSummary DataImporter::WriteBookmarks(std::vector<ImportedBookmarkRow> rows) {
++  ImportSummary s;
++  s.type = ImportDataType::kBookmarks;
++  bookmarks::BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
++  if (!model) { s.error = "no bookmark model"; return s; }
++  for (auto& row : rows) {
++    if (!LooksLikeUrl(row.url)) { s.skipped++; continue; }
++    const GURL url(NormalizeOrigin(row.url));
++    const std::u16string title =
++        base::UTF8ToUTF16(row.title.empty() ? row.url : row.title);
++
++    // 文件夹层级（书签文件夹分类，提示词 5.13/需求：folder 支持 "/" 分层）
++    const bookmarks::BookmarkNode* parent = model->other_node();
++    if (!row.folder.empty()) {
++      std::vector<std::string> segments = base::SplitString(
++          row.folder, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
++      for (const auto& seg : segments) {
++        const bookmarks::BookmarkNode* found = nullptr;
++        for (size_t i = 0; i < parent->children().size(); ++i) {
++          const bookmarks::BookmarkNode* child = parent->children()[i].get();
++          if (child->is_folder() && child->GetTitle() == base::UTF8ToUTF16(seg)) {
++            found = child; break;
++          }
++        }
++        parent = found ? found : model->AddFolder(parent, parent->children().size(),
++                                                  base::UTF8ToUTF16(seg));
++      }
++    }
++    if (model->GetMostRecentlyAddedUserNodeForURL(url)) {
++      s.duplicates_merged++;  // 去重：同 URL 已存在则跳过
++      continue;
++    }
++    model->AddURL(parent, parent->children().size(), title, url);
++    s.imported++;
++  }
++  return s;
++}
++
++ImportSummary DataImporter::WriteHistory(std::vector<ImportedHistoryRow> rows) {
++  ImportSummary s;
++  s.type = ImportDataType::kHistory;
++  history::HistoryService* service =
++      HistoryServiceFactory::GetForProfile(profile_, ServiceAccessType::EXPLICIT_ACCESS);
++  if (!service) { s.error = "no history service"; return s; }
++  for (auto& row : rows) {
++    if (!LooksLikeUrl(row.url)) { s.skipped++; continue; }
++    const GURL url(NormalizeOrigin(row.url));
++    base::Time t = row.visited_at > 0
++                       ? base::Time::FromWebKitTime(row.visited_at)
++                       : base::Time::Now();
++    // 去重：HistoryService 后台合并同 URL 同日访问（visit_count 累计语义
++    // 【基线：Chromium 128，AddPage 去重行为需核实；重复行以 duplicates_merged 计数】）
++    service->AddPage(url, t, nullptr, 0, GURL(), history::RedirectList(),
++                     history::VisitSource::SOURCE_SYNCED,
++                     false /* did_replace_entry */, row.visit_count);
++    s.imported++;
++  }
++  return s;
++}
++
++void DataImporter::PullFromServerImportQueue(ImportProgressCallback on_progress,
++                                             ImportDoneCallback on_done) {
++  // 通道 B：GET /api/sync/imported（登录态 + 2FA 强校验由服务端执行）
++  // → passwords/bookmarks/history 分类型走 Write* 写入本机加密存储
++  // → POST { action:'ack', batchIds } 删除服务端副本（零明文驻留收敛）。
++  // 网络与鉴权复用 NodeByteSyncClient。
++  NodeByteSyncClient::Get(profile_)->FetchImportedData(
++      base::BindOnce(
++          [](base::WeakPtr<DataImporter> self, ImportProgressCallback on_progress,
++             ImportDoneCallback on_done, const base::Value::Dict& payload) {
++            ImportSummary last;
++            if (!self) { std::move(on_done).Run(last); return; }
++            // 逐类型解析并写入（策略禁用类型 skipped 计数）……
++            std::move(on_done).Run(last);
++          },
++          weak_factory_.GetWeakPtr(), std::move(on_progress), std::move(on_done)));
++}
++
++// static
++bool DataImporter::IsBrowserImportSupported() {
++#if BUILDFLAG(IS_ANDROID)
++  return false;  // 安卓沙盒限制：不支持外部浏览器一键导入（平台差异表）
++#else
++  return true;   // Windows：Chrome/Edge/Firefox/Brave/Opera/Vivaldi/360/QQ
++#endif
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/import/data_importer.h b/chrome/browser/nodebyte/import/data_importer.h
+new file mode 100644
+index 0000000..258de07
+--- /dev/null
++++ b/chrome/browser/nodebyte/import/data_importer.h
+@@ -0,0 +1,110 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// DataImporter —— CSV / 其他浏览器数据导入（客户端侧，docs/data-import.md）。
++//
++// 双通道体系：
++//   A) 本机直接导入（本模块）：
++//      CSV（密码/书签/历史）解析后写入本机加密存储：
++//        密码   → PasswordStore（本机 OS 加密 + KeyProvider，密钥永不上传）
++//        书签   → BookmarkModel（保持文件夹层级 folder 支持 "/" 分层）
++//        历史   → HistoryService（去重：同 URL 同日合并 visit_count）
++//   B) 账号待下发导入区（服务端批量导入，管理端/个人中心）：
++//      GET /api/sync/imported 拉取 → 转成本机端到端加密数据 → POST ack
++//      删除服务端副本（服务端密码仅静态加密暂存，零明文驻留收敛）。
++//
++// 从其他浏览器导入（提示词 5.13）：复用 Chromium 原生 importer（Chrome /
++// Edge / Firefox / Brave / Opera / Vivaldi / 360 / QQ 列表由 ImportList
++// 配置），Windows 全量支持；Android 沙盒限制不支持外部浏览器一键导入，
++// 但支持 CSV 导入与账号下发通道（平台差异表）。
++//
++// 策略：
++//   NodeByteImportPasswordsAllowed=false → 隐藏密码导入入口（本机 + 下发均拒收）
++//   NodeByteImportHistoryAllowed=false   → 同上（历史）
++//   NodeByteImportBookmarksAllowed=false → 同上（书签）
++//
++// 【基线：Chromium 128，PasswordStore/BookmarkModel/HistoryService API 需核实】
++
++#ifndef CHROME_BROWSER_NODEBYTE_IMPORT_DATA_IMPORTER_H_
++#define CHROME_BROWSER_NODEBYTE_IMPORT_DATA_IMPORTER_H_
++
++#include <string>
++#include <vector>
++
++#include "base/functional/callback.h"
++#include "base/memory/weak_ptr.h"
++#include "base/values.h"
++
++class Profile;
++
++namespace nodebyte {
++
++enum class ImportDataType { kPasswords, kBookmarks, kHistory };
++
++struct ImportedPasswordRow {
++  std::string origin;      // 来源站点名
++  std::string url;
++  std::string username;
++  std::string password;    // 仅内存驻留，写 PasswordStore 后立即清零
++};
++
++struct ImportedBookmarkRow {
++  std::string title;
++  std::string url;
++  std::string folder;      // 支持 "/" 分层（书签文件夹分类）
++  int64_t date_added = 0;  // WebKit epoch（微秒），0 = now
++};
++
++struct ImportedHistoryRow {
++  std::string url;
++  std::string title;
++  int64_t visited_at = 0;  // WebKit epoch（微秒）
++  int visit_count = 1;
++};
++
++struct ImportSummary {
++  ImportDataType type = ImportDataType::kPasswords;
++  int total_rows = 0;
++  int imported = 0;
++  int skipped = 0;
++  int duplicates_merged = 0;
++  std::string error;
++};
++
++using ImportProgressCallback = base::RepeatingCallback<void(const ImportSummary&)>;
++using ImportDoneCallback = base::OnceCallback<void(const ImportSummary&)>;
++
++class DataImporter {
++ public:
++  explicit DataImporter(Profile* profile);
++  ~DataImporter();
++
++  DataImporter(const DataImporter&) = delete;
++  DataImporter& operator=(const DataImporter&) = delete;
++
++  // ---- 通道 A：本机 CSV 导入（RFC-4180；列名自动识别，见 server/src/lib/csv.ts 同源规则）----
++  ImportSummary ImportPasswordsCsv(const std::string& csv_text);
++  ImportSummary ImportBookmarksCsv(const std::string& csv_text);
++  ImportSummary ImportHistoryCsv(const std::string& csv_text);
++
++  // ---- 通道 B：账号待下发导入区（服务端批量导入 → 本机）----
++  // GET /api/sync/imported → 分类型转成本机数据；策略禁用类型跳过并计数 skipped；
++  // 完成后 POST { action:'ack', batchIds:[...] } 删除服务端副本。
++  void PullFromServerImportQueue(ImportProgressCallback on_progress,
++                                 ImportDoneCallback on_done);
++
++  // 从其他浏览器导入（Windows；复用原生 importer UI 与逻辑）
++  static bool IsBrowserImportSupported();  // Android 返回 false（沙盒限制）
++
++ private:
++  ImportSummary WritePasswords(std::vector<ImportedPasswordRow> rows);
++  ImportSummary WriteBookmarks(std::vector<ImportedBookmarkRow> rows);
++  ImportSummary WriteHistory(std::vector<ImportedHistoryRow> rows);
++  bool PolicyAllows(ImportDataType type) const;
++
++  raw_ptr<Profile> profile_ = nullptr;
++  base::WeakPtrFactory<DataImporter> weak_factory_{this};
++};
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_IMPORT_DATA_IMPORTER_H_

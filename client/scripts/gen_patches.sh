@@ -25,6 +25,8 @@ declare -A PATCH_GROUPS=(
   ["0130-nodebyte-cookie-sessions"]="chrome/browser/nodebyte/cookie_sessions"
   ["0140-nodebyte-drop"]="chrome/browser/nodebyte/drop chrome/browser/nodebyte/fingerprint"
   ["0150-nodebyte-webui"]="chrome/browser/ui/webui/nodebyte"
+  ["0160-nodebyte-extensions"]="chrome/browser/nodebyte/extensions"
+  ["0170-nodebyte-import"]="chrome/browser/nodebyte/import"
 )
 
 mkdir -p "${OUT_DIR}"

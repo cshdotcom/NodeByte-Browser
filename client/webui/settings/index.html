@@ -2,51 +2,174 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>NodeByte 设置 · 代理与同步</title>
+<title>NodeByte 设置 · 数据导入 / 同步 / 加速器 / 扩展</title>
 <style>
-:root { --bg:#f6f7f9; --card:#fff; --border:#e4e7ec; --text:#1a1d23; --dim:#6b7280; --primary:#2f6bff; }
+:root { --bg:#f6f7f9; --card:#fff; --border:#e4e7ec; --text:#1a1d23; --dim:#6b7280; --primary:#2f6bff; --ok:#16a34a; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#14161b; --card:#1b1e26; --border:#2a2f3a; --text:#e8eaf0; --dim:#9aa3b2; --primary:#5b8bff; }
+  :root { --bg:#14161b; --card:#1b1e26; --border:#2a2f3a; --text:#e8eaf0; --dim:#9aa3b2; --primary:#5b8bff; --ok:#4ade80; }
 }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:-apple-system,'Segoe UI','PingFang SC',sans-serif; background:var(--bg); color:var(--text); padding:20px; }
 h2 { font-size:16px; margin:18px 0 10px; }
-.card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; max-width:640px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; max-width:680px; margin-bottom:4px; }
 .f { margin-bottom:12px; }
 label { display:block; font-size:12px; color:var(--dim); font-weight:600; margin-bottom:5px; }
-input[type=text], input[type=url] { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--text); font-size:13.5px; }
-input:disabled { opacity:.55; cursor:not-allowed; }
+input[type=text], input[type=url], select { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--text); font-size:13.5px; }
+input:disabled, select:disabled { opacity:.55; cursor:not-allowed; }
 .locked { border-color: var(--primary) !important; }
 .masked { padding:9px 12px; border:1px dashed var(--primary); border-radius:9px; color:var(--dim); font-size:13px; background:rgba(47,107,255,.06); }
-.hint { font-size:11.5px; color:var(--dim); margin-top:5px; line-height:1.5; }
+.hint { font-size:11.5px; color:var(--dim); margin-top:5px; line-height:1.6; }
 .badge { font-size:11px; padding:2px 8px; border-radius:999px; background:rgba(47,107,255,.12); color:var(--primary); font-weight:700; }
+.btn { display:inline-block; padding:8px 14px; border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--text); font-size:13px; cursor:pointer; }
+.btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.checks { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:6px; }
+.checks label { display:flex; gap:6px; align-items:center; font-size:13px; color:var(--text); font-weight:400; }
+table { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px; }
+th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
+th { color:var(--dim); font-weight:600; }
+.mono { font-family:ui-monospace,monospace; }
+.ok { color:var(--ok); font-weight:600; }
+progress { width:100%; height:6px; }
 </style>
 </head>
 <body>
-<h2><span class="badge">mandatory 示例</span> 同步服务器地址</h2>
+<h2><span class="badge">数据导入</span> 从其他浏览器 / CSV 文件导入</h2>
 <div class="card">
   <div class="f">
+    <label>从常见电脑端浏览器一键导入（Windows；Android 无此能力）</label>
+    <div class="row">
+      <select id="importSource" style="width:220px">
+        <option>Chrome</option><option>Microsoft Edge</option><option>Firefox</option>
+        <option>Brave</option><option>Opera</option><option>Vivaldi</option>
+        <option>360 安全浏览器</option><option>QQ 浏览器</option>
+      </select>
+      <button class="btn" id="btnBrowserImport">开始导入…</button>
+    </div>
+    <p class="hint">可导入：书签、保存的密码、历史记录（扩展列表 Windows 支持）。入口同时出现在首次启动引导页与设置页（客户端提示词 5.13）。
+    策略 NodeByteImportPasswordsAllowed / NodeByteImportHistoryAllowed / NodeByteImportBookmarksAllowed 关闭时对应项隐藏。</p>
+  </div>
+  <div class="f">
+    <label>CSV 文件导入（密码 / 书签 / 历史记录）</label>
+    <div class="row">
+      <select id="csvType" style="width:150px">
+        <option value="passwords">密码（CSV）</option>
+        <option value="bookmarks">书签（CSV）</option>
+        <option value="history">历史记录（CSV）</option>
+      </select>
+      <input type="file" id="csvFile" accept=".csv" style="font-size:12.5px">
+      <button class="btn primary" id="btnCsvImport">导入到本机 + 同步到账号</button>
+    </div>
+    <p class="hint">
+      支持格式：Chrome/Edge 导出（name,url,username,password）、Firefox 导出、Bitwarden 导出（login_uri,login_username,login_password）；
+      书签（title,url,folder,date_added）；历史（url,title,last_visit_time,visit_count）。列名自动识别。
+      导入的密码立即写入本机加密 PasswordStore（密钥永不上传），并按同步项勾选状态上传服务端。
+      也可以在网页个人中心把 CSV 导入到账号，由任意设备登录后拉取（/api/sync/imported）。
+    </p>
+    <div id="csvResult"></div>
+  </div>
+</div>
+
+<h2><span class="badge">同步</span> 同步项勾选（数据类型开关）</h2>
+<div class="card">
+  <div class="f">
+    <label>选择要同步的数据类型（保存到本地偏好并随同步上报；策略 CustomSyncDisabledTypes 中的类型强制禁用并置灰）</label>
+    <div class="checks" id="syncChecks">
+      <label><input type="checkbox" data-type="bookmarks" checked> 书签/收藏夹</label>
+      <label><input type="checkbox" data-type="passwords" checked> 密码凭证</label>
+      <label><input type="checkbox" data-type="history" checked> 浏览历史</label>
+      <label><input type="checkbox" data-type="settings" checked> 基础配置/偏好</label>
+      <label><input type="checkbox" data-type="cookie_sets" checked> Cookie 会话集</label>
+      <label><input type="checkbox" data-type="extensions" checked> 扩展插件（crx）</label>
+      <label><input type="checkbox" data-type="fingerprints" checked> 指纹配置</label>
+      <label><input type="checkbox" data-type="proxy" checked> 代理/加速器配置</label>
+      <label><input type="checkbox" data-type="read_later"> 稍后再看</label>
+    </div>
+    <p class="hint">同步为客户端 AES-GCM 端到端加密（密钥永不上传）；策略 CustomAllowSync=false 时整个同步入口置灰（本示例按 mandatory 生效演示）。</p>
+  </div>
+  <div class="f">
     <label>同步服务器地址 / Sync server</label>
-    <!-- CustomLockSyncServer=true：输入框置灰禁止修改（客户端提示词 4.3 / 5.2.5） -->
+    <!-- CustomLockSyncServer=true：输入框置灰禁止修改（客户端提示词 4.3 / 5.2.5）；NodeByteAllowCustomSyncServer=false 同样锁定 -->
     <input id="syncServer" type="url" value="bsync.nodebyte.cn" disabled>
     <p class="hint">策略 CustomLockSyncServer=true 时锁定；切换服务器不删除本机任何数据，仅切换上报目标。</p>
   </div>
 </div>
 
-<h2><span class="badge">敏感字段 UI 隐藏示例</span> 代理 / VLESS</h2>
+<h2><span class="badge">加速器</span> 代理与第三方协议</h2>
 <div class="card">
   <div class="f">
-    <label>代理服务器 / Proxy server</label>
-    <!-- sensitiveFields 包含 CustomProxyVlessConfig 时：隐藏真实 value，替换为受管控提示（5.3.3） -->
-    <input id="proxyServer" type="text" placeholder="socks5://127.0.0.1:1080">
-    <p class="hint">mandatory 下发时代理 UI 全灰，用户不能编辑节点；recommended 下发默认节点、用户可改。</p>
+    <label>加速器模式 / Accelerator mode</label>
+    <select id="accelMode">
+      <option value="system">跟随系统</option>
+      <option value="direct">直连</option>
+      <option value="fixed_servers">手动加速节点</option>
+    </select>
+    <p class="hint">mandatory 下发 ProxyMode 时全灰不可改；recommended 下发默认节点、用户可切换；设备状态经 WebSocket 上报当前代理。</p>
   </div>
   <div class="f">
-    <label>VLESS 节点（UUID / 密钥）</label>
-    <div id="vlessMasked" class="masked">此配置由组织管理员管控，不可查看和修改</div>
-    <input id="vlessConfig" type="text" hidden>
-    <p class="hint">敏感字段仅 UI 层隐藏：chrome://policy 与开发者工具仍可读取内存值（向用户明示）。</p>
+    <label>节点协议（第三方协议支持矩阵）</label>
+    <select id="accelProto">
+      <option value="http">HTTP</option>
+      <option value="https">HTTPS</option>
+      <option value="socks4">SOCKS4</option>
+      <option value="socks5">SOCKS5（原生代理栈）</option>
+      <option value="vmess">VMess</option>
+      <option value="vless">VLESS</option>
+      <option value="trojan">Trojan</option>
+      <option value="shadowsocks">Shadowsocks</option>
+    </select>
+    <p class="hint">
+      原生协议（HTTP/HTTPS/SOCKS4/SOCKS5）走 Chromium 原生 net/proxy_resolution 栈；
+      VMess/VLESS/Trojan/Shadowsocks 由内核拉起本地 Xray-core（方案 B：配置指向 127.0.0.1 socks5），支持 vless:// trojan:// ss:// vmess:// 链接导入与订阅 URL 更新。
+      策略 NodeByteAcceleratorEnabled=false 关闭加速器；NodeByteAcceleratorProtocols 限制可用协议；allow_vless_proxy=false 隐藏第三方协议。
+    </p>
   </div>
+  <div class="f">
+    <label>服务器地址 / 端口</label>
+    <div class="row">
+      <input id="proxyServer" type="text" placeholder="socks5://127.0.0.1:1080" style="flex:1">
+      <input id="proxyPort" type="text" placeholder="端口" style="width:90px">
+    </div>
+  </div>
+  <div class="f">
+    <label>VLESS / VMess / Trojan / SS 节点（UUID / 密钥 / 订阅）</label>
+    <div id="vlessMasked" class="masked">此配置由组织管理员管控，不可查看和修改</div>
+    <textarea id="vlessConfig" rows="3" class="mono" hidden placeholder="vless://uuid@host:443?security=tls#node  或订阅 URL"></textarea>
+    <p class="hint">敏感字段仅 UI 层隐藏：nodebyte://policy 与开发者工具仍可读取内存值（向用户明示，提示词 5.3.3）。</p>
+  </div>
+</div>
+
+<h2><span class="badge">扩展插件</span> 本地安装 / 上传 / 强制下发</h2>
+<div class="card">
+  <div class="f">
+    <label>手动安装本地扩展（.crx / .zip）— Windows 与 Android 均支持</label>
+    <div class="row">
+      <input type="file" id="extFile" accept=".crx,.zip" style="font-size:12.5px">
+      <button class="btn primary" id="btnExtInstall">安装扩展</button>
+      <button class="btn" id="btnExtUpload">上传到同步空间</button>
+    </div>
+    <p class="hint">
+      Windows：设置页/扩展管理页选择 crx/zip 直接安装；
+      Android：设置 → 扩展 → 「安装本地扩展」，调用系统文件选择器（SAF）选取 crx/zip，内核 ExtensionService 静默安装（需开启「开发者模式」开关，策略 AllowUserSelfInstallExtension=false 时隐藏）。
+      「上传到同步空间」把 crx 原始包加密上传（EXTENSION_BLOB 类型，计入个人云配额），跨设备恢复时静默重装。
+    </p>
+  </div>
+  <div class="f">
+    <label>从扩展商店安装</label>
+    <p class="hint">
+      下载源优先级：Edge 扩展商店 → Chrome 网上应用店 → 失败上报错误日志（时间戳/用户/用户组/扩展 ID/下载源/结果/设备 ID）。
+      访问商店时 HTTP-UA 伪装为对应原版浏览器（策略 CustomSpoofBrowserVendor / CustomSpoofUserAgent）。
+      策略强制下发的扩展（ForceInstallExtensionPackages / Ids）启用/停用/删除全部置灰，策略移除后自动卸载。
+    </p>
+  </div>
+  <table id="extTable">
+    <thead><tr><th>扩展</th><th>版本</th><th>来源</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>NodeByte 示例扩展</td><td class="mono">1.0.0</td><td>本地安装</td><td class="ok">已启用</td></tr>
+      <tr><td>组织下发扩展（示例）</td><td class="mono">2.3.1</td><td>管理员强制</td><td>强制启用（置灰不可操作）</td></tr>
+    </tbody>
+  </table>
 </div>
 
 <h2>开发模式</h2>
@@ -64,26 +187,62 @@ input:disabled { opacity:.55; cursor:not-allowed; }
 </div>
 
 <script>
-// 数据来源：mojo nodebyte.mojom.NodeBytePolicy（GetSensitiveFields / IsSyncServerLocked）
-// 演示逻辑：mandatory → 置灰；sensitiveFields → 隐藏明文
-const settings = {
+// 数据来源：mojo nodebyte.mojom.NodeBytePolicy / NodeByteSync / NodeByteDrop
+// 演示逻辑：mandatory → 置灰；sensitiveFields → 隐藏明文；revoked → 删除本地强制配置
+const policy = {
   mandatory: { CustomLockSyncServer: true, ProxyMode: 'fixed_servers' },
-  sensitiveFields: ['CustomProxyVlessConfig']
+  sensitiveFields: ['CustomProxyVlessConfig'],
+  directives: [
+    { id: 'd1', key: 'CustomAllowGuestMode', valueType: 'switch', value: false },
+    { id: 'd2', key: 'NodeByteSyncServerOverride', valueType: 'text', value: 'sync.internal.example.com' },
+    { id: 'd3', key: 'DefaultSearchProviderSearchURL', valueType: 'search_engine', value: 'https://duckduckgo.com/?q={searchTerms}' }
+  ],
+  // 撤销语义（服务端下发 revoked，客户端删除本地强制配置）：
+  //   switch        → 恢复默认值（指令强制开则回到关、强制关则回到开）
+  //   text/address  → 清空
+  //   search_engine → 恢复编译时默认搜索引擎（必应）
+  revoked: [
+    { id: 'd0', key: 'DefaultSearchProviderSearchURL', valueType: 'search_engine', revokedAt: '2026-09-25T00:00:00Z' }
+  ]
 };
+const COMPILE_DEFAULT_SEARCH = 'https://cn.bing.com/search?q={searchTerms}';
 
 const syncServer = document.getElementById('syncServer');
-if (settings.mandatory.CustomLockSyncServer) syncServer.classList.add('locked');
+if (policy.mandatory.CustomLockSyncServer) syncServer.classList.add('locked');
 
 const proxy = document.getElementById('proxyServer');
-if (settings.mandatory.ProxyMode === 'fixed_servers') { proxy.disabled = true; proxy.value = ''; }
+if (policy.mandatory.ProxyMode === 'fixed_servers') { proxy.disabled = true; proxy.value = ''; }
 
-if (settings.sensitiveFields.includes('CustomProxyVlessConfig')) {
+if (policy.sensitiveFields.includes('CustomProxyVlessConfig')) {
   document.getElementById('vlessMasked').hidden = false;
   document.getElementById('vlessConfig').hidden = true;
 } else {
   document.getElementById('vlessMasked').hidden = true;
   document.getElementById('vlessConfig').hidden = false;
 }
+
+// 同步项勾选与禁用类型合并（CustomSyncDisabledTypes 强制置灰）
+const disabledTypes = new Set(['fingerprints']);
+document.querySelectorAll('#syncChecks input').forEach((el) => {
+  if (disabledTypes.has(el.dataset.type)) { el.disabled = true; el.checked = false; }
+});
+
+// 指令撤销处理示例：revoked 里的 search_engine → 恢复编译默认（必应）
+function applyRevocations(revoked) {
+  for (const r of revoked) {
+    if (r.valueType === 'search_engine') setDefaultSearch(COMPILE_DEFAULT_SEARCH);
+    // switch/text/json 的清理在 C++ DirectiveApplier 中执行（nodebyte_policy_extend）
+  }
+}
+
+// CSV 导入（经 Mojo NodeByteSync::ImportCsvData）
+document.getElementById('btnCsvImport').addEventListener('click', () => {
+  const f = document.getElementById('csvFile').files?.[0];
+  const t = document.getElementById('csvType').value;
+  const out = document.getElementById('csvResult');
+  if (!f) { out.innerHTML = '<p class="hint">请选择 CSV 文件</p>'; return; }
+  out.innerHTML = `<p class="hint ok">已提交导入请求：${f.name}（${t}）→ 本机加密入库 → 按同步项勾选上传</p>`;
+});
 </script>
 </body>
 </html>

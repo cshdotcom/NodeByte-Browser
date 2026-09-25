@@ -7,6 +7,39 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-25
+
+### Added（数据批量导入体系 + 策略指令撤销 + 加速器协议矩阵 + CNB 双平台）
+
+- **CSV 批量导入体系**（三通道，docs/data-import.md）：
+  - **管理端导入中心**（/admin 新模块）：上传 CSV → 服务端解析预览（列映射自动识别、有效行统计、告警清单、密码脱敏预览）→ **批量选择用户**（搜索/分页多选、翻页累计勾选、按组批量、一键全部用户）→ 合并/覆盖模式 → 二次确认 → 执行报告；全流程落审计（import_data_to_users）
+  - **个人中心/前台自助导入**（/u 新「数据导入」标签）：只能导入到**自己**账号（服务端强制 target=self，不信任前端），导入计入个人云配额
+  - **浏览器设置内导入**（nodebyte://settings 数据导入段）：CSV 密码/书签/历史直接写入本机加密存储（PasswordStore/BookmarkModel 文件夹层级/History 去重合并），按同步项勾选状态增量上传
+  - **格式兼容**：Chrome/Edge（name,url,username,password）、Firefox、Bitwarden（login_uri,login_username,login_password）导出格式与中英文列别名自动识别；RFC-4180 解析（引号转义/字段内逗号换行/BOM/CRLF），服务端 csv.ts 与客户端 data_importer.cc 同源规则；20MB/10 万行护栏 + 零依赖自测（server/scripts/csv-selftest.mjs）
+  - **账号下发通道**：`GET /api/sync/imported` 拉取待下发数据 → 客户端转端到端加密 → `POST ack` 删除服务端副本（密码服务端仅静态加密暂存，收敛为「零明文、零副本」）
+  - 新增表：import_batch / user_imported_passwords / user_imported_bookmarks / user_imported_history
+- **策略指令（下发/可撤销）**（docs/policy-dictionary.md 五）：
+  - 新表 policy_directive + `/api/admin/directives`（create/revoke/list，作用域 global/group/user，高危开关二次确认）
+  - `/api/client/policy` 响应新增 `directives[]`（生效指令，优先级最高）与 `revoked[]`（近 30 天撤销），指令变更纳入 policyVersion 指纹
+  - **撤销语义**（按用户需求逐字实现）：撤销后客户端**删除该指令的本地强制配置** —— 开关恢复默认值（强制开→回到关；强制关→回到开）、地址/文本/数字/JSON **清空**、搜索引擎恢复**编译时默认搜索引擎（必应）**；客户端 `directive_applier.cc` 幂等执行 + 指令被物理删除时自动收敛
+  - 服务端注册表 directive-registry.ts（39 键 + 默认值 + 高危标记）与客户端 SwitchDefaultForKey 对齐；后台「策略指令」面板（状态筛选/创建/撤销语义确认弹窗）
+- **加速器第三方代理协议支持矩阵**（docs/accelerator.md）：
+  - 原生：HTTP / HTTPS / SOCKS4 / SOCKS5（net/proxy_resolution）；第三方：VMess / VLESS / Trojan / Shadowsocks（方案 B 本地 Xray，inbound socks5 → 协议出站）+ 订阅 URL 自动更新
+  - 策略键：NodeByteAcceleratorEnabled / NodeByteAcceleratorProtocols / NodeByteAllowCustomProxy；UI 协议选择与敏感字段掩码；平台差异（Windows 本地二进制 / Android 应用内组件）
+- **安卓端手动安装插件 + 上传自己的插件**：
+  - 新增 `chrome/browser/nodebyte/extensions/extension_installer.{h,cc}`：crx/zip 本地安装（Windows 直装；Android 经 SAF 拷贝入私有目录走同一管线）、同步恢复静默重装、强制下发（Edge→Chrome 商店回退 + 失败上报全字段）、UploadExtensionToSync（EXTENSION_BLOB 计配额）、强制扩展 UI 置灰判断
+  - 策略键 AllowUserSelfInstallExtension / AllowUserUploadOwnExtension
+- **客户端导入引擎**：新增 `chrome/browser/nodebyte/import/data_importer.{h,cc}`（CSV 三类解析/写入本机加密存储/账号下发通道/浏览器导入支持判断），补丁组 0160/0170 生成并验证干净应用
+- **CNB 双平台构建**：
+  - `.cnb.yml`：push 默认仅跑轻量校验（Shell 语法 + 补丁干跑 + 服务端 tsc/standalone 构建 + CSV 自测，确定性通过）；Chromium 全量编译用 web_trigger 手动触发且带 ci_precheck.sh 硬件预检（磁盘/内存/核数不足立即失败）——确保不浪费免费核时
+  - `client/scripts/ci_precheck.sh` / `ci_build_all.sh`；docs/build-cnb.md 平台指南
+- 文档：docs/data-import.md、docs/accelerator.md、docs/feature-checklist.md（两份提示词逐项对照表）、docs/build-cnb.md；policy-dictionary/api-contract 同步更新
+
+### Changed
+- 设置 WebUI（nodebyte://settings）扩展四段：数据导入、同步项勾选（9 类 + 策略置灰）、加速器协议、扩展插件管理
+- policy-defaults.ts 新增加速器/导入相关键；audit 新增 import_data_to_users / create_policy_directive / revoke_policy_directive
+- /api/client/policy 的 MergedPolicy 类型扩展（directives/revoked）
+
 ## [1.2.1] - 2026-09-25
 
 ### Fixed（对象存储切换 RustFS —— 首个可用的 All-in-One 镜像）

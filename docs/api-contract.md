@@ -38,7 +38,7 @@
 ### 2.2 浏览器客户端
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/client/policy?deviceId=` | 合并策略（override>组>全局）+ quota + forceInstallExtensions + policyVersion |
+| GET | `/api/client/policy?deviceId=` | 合并策略（override>组>全局）+ quota + forceInstallExtensions + policyVersion + **directives[]（生效指令）+ revoked[]（近 30 天撤销）** |
 | POST | `/api/client/device/status` | activeTab/openTabs/proxy/fingerprintTemplateId 落库 |
 | GET | `/api/client/quota` | 云配额（total/used/free/percent） |
 
@@ -47,6 +47,8 @@
 |---|---|---|
 | GET | `/api/sync/{type}?since=` | 列出密文快照（预签名下载 URL）；type ∈ bookmarks/history/settings/cookie_sets/fingerprints/proxy/extensions/passwords/preferences |
 | POST | `/api/sync/{type}` | `{lastVersion, blob(客户端 AES-GCM 密文), meta?, snapshotType?}`；策略校验（CustomAllowSync/CustomSyncDisabledTypes → 40303）、配额 41301 |
+| GET | `/api/sync/imported?limit=` | **待下发导入区**（管理端/自助导入的数据；密码服务端解密后经 TLS 交付本人） |
+| POST | `/api/sync/imported` | `{action:'ack', batchIds:[...]}` 客户端确认合并后删除服务端副本（零明文驻留收敛） |
 
 ### 2.4 Drop
 | 方法 | 路径 | 说明 |
@@ -69,6 +71,9 @@
 ### 2.6 管理后台（节选）
 `/api/admin/users`（CRUD+actions: ban/reset_password/reset_2fa/revoke_devices/set_quota/set_policy）、
 `/api/admin/groups`（CRUD+set_features）、`/api/admin/policy-sets`（CRUD）、
+`/api/admin/directives`（**策略指令 create/revoke/list，撤销语义见 policy-dictionary.md 五**）、
+`/api/admin/import`（**CSV 解析预览**）+ `/api/admin/import/apply`（**批量选用户导入**，targets: userIds/groupIds/allUsers，mode: merge/replace）、
+`/api/personal/import`（**自助导入到自己账号** + GET 待下发概览）、
 `/api/admin/files`（verify 二次鉴权 → 列表/下载/删除）、`/api/admin/extensions`（包/ID 下发/日志）、
 `/api/admin/audit`、`/api/admin/settings`、`/api/admin/stats`、`/api/admin/bootstrap`。
 

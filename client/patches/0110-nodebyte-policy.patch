@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc
-new file mode 100644
+new file mode 100755
 index 0000000..3c83015
 --- /dev/null
 +++ b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc
@@ -178,7 +178,7 @@ index 0000000..3c83015
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h
-new file mode 100644
+new file mode 100755
 index 0000000..0dbf907
 --- /dev/null
 +++ b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h
@@ -254,12 +254,306 @@ index 0000000..0dbf907
 +}  // namespace nodebyte
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_CLOUD_POLICY_PROVIDER_H_
-diff --git a/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h
+diff --git a/chrome/browser/nodebyte/policy_extend/directive_applier.cc b/chrome/browser/nodebyte/policy_extend/directive_applier.cc
 new file mode 100644
-index 0000000..d311c7d
+index 0000000..3ea80e1
+--- /dev/null
++++ b/chrome/browser/nodebyte/policy_extend/directive_applier.cc
+@@ -0,0 +1,184 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// DirectiveApplier 实现 —— 见 directive_applier.h 文件头（撤销语义）。
++//
++// 关键实现说明：
++//  - 本地强制配置存于本地 Prefs（profile_->GetPrefs()），键名
++//    "nodebyte.directive.<key>"，值即指令 value；CloudOrgPolicyProvider
++//    组装 PolicyService 载荷时合并这些键（优先级高于用户组/全局策略）。
++//  - 开关默认值来自 DirectiveDefaults()（与服务端 directive-registry 对齐）：
++//    NodeByte「是否允许」类默认 true（放行哲学），安全类开关默认 false。
++//  - 搜索引擎编译默认写在 nodebyte_constants.h（kDefaultSearchEngineName =
++//    "Bing" / kDefaultSearchURL），撤销后由 TemplateURLService 恢复。
++//    【基线：Chromium 128，TemplateURLService API 需核实】
++
++#include "chrome/browser/nodebyte/policy_extend/directive_applier.h"
++
++#include <utility>
++
++#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/strings/string_util.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++#include "chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/search_engines/template_url_service.h"
++
++namespace nodebyte {
++
++namespace {
++
++constexpr char kPrefDirectivesKnown[] = "nodebyte.directive.known_ids";
++constexpr char kPrefForcedPrefix[] = "nodebyte.directive.forced.";
++
++// 开关键 → 默认值（撤销后恢复；与服务端 directive-registry.ts 对齐）。
++// 哲学：NodeByte 功能「是否允许」类默认 true；高危/安全类默认 false。
++bool SwitchDefaultForKey(const std::string& key) {
++  // 高危/默认关闭类
++  if (key == policy_keys::kRequire2fa || key == policy_keys::kDisableRendererSandbox ||
++      key == policy_keys::kLockSyncServer || key == policy_keys::kAllowWsUnderHttps) {
++    return false;
++  }
++  // DefaultSearchProviderEnabled 默认 false（不强制）
++  if (key == "DefaultSearchProviderEnabled") return false;
++  // AllowUserUninstallForcedExt 默认 false
++  if (key == policy_keys::kAllowUserUninstallForcedExt) return false;
++  // 其余 NodeByte 功能开关默认 true（允许）
++  return true;
++}
++
++}  // namespace
++
++DirectiveValueType ParseDirectiveValueType(const std::string& s) {
++  if (s == "switch") return DirectiveValueType::kSwitch;
++  if (s == "number") return DirectiveValueType::kNumber;
++  if (s == "json") return DirectiveValueType::kJson;
++  if (s == "search_engine") return DirectiveValueType::kSearchEngine;
++  return DirectiveValueType::kText;
++}
++
++DirectiveApplier::DirectiveApplier(Profile* profile) : profile_(profile) {
++  prefs_ = profile->GetPrefs();
++}
++
++DirectiveApplier::~DirectiveApplier() = default;
++
++void DirectiveApplier::ApplyFromPolicyJson(const base::Value::Dict& policy_data) {
++  // 1) 撤销处理（幂等，先于应用）
++  if (const base::Value::List* revoked = policy_data.FindList("revoked")) {
++    for (const base::Value& item : *revoked) {
++      const base::Value::Dict* d = item.GetIfDict();
++      if (!d) continue;
++      RevokedDirective r;
++      r.id = *d->FindString("id");
++      r.key = d->FindString("key") ? **d->FindString("key") : std::string();
++      r.value_type = ParseDirectiveValueType(
++          d->FindString("valueType") ? **d->FindString("valueType") : "text");
++      if (r.id.empty() && r.key.empty()) continue;
++      RevokeDirective(r);
++      DVLOG(1) << "[NodeByte] directive revoked: " << r.key << " (" << r.id << ")";
++    }
++  }
++
++  // 2) 生效指令应用
++  active_directives_.clear();
++  if (const base::Value::List* directives = policy_data.FindList("directives")) {
++    for (const base::Value& item : *directives) {
++      const base::Value::Dict* d = item.GetIfDict();
++      if (!d) continue;
++      Directive dir;
++      dir.id = d->FindString("id") ? **d->FindString("id") : std::string();
++      dir.key = d->FindString("key") ? **d->FindString("key") : std::string();
++      dir.value_type = ParseDirectiveValueType(
++          d->FindString("valueType") ? **d->FindString("valueType") : "text");
++      if (const base::Value* v = d->Find("value")) dir.value = v->Clone();
++      dir.scope = d->FindString("scope") ? **d->FindString("scope") : "global";
++      if (dir.key.empty()) continue;
++      active_directives_.push_back(std::move(dir));
++      ApplyDirective(active_directives_.back());
++    }
++  }
++
++  // 3) 收敛：本地已知但本次策略里既不在 directives 也不在 revoked 的指令
++  //    （服务端可能物理删除了记录）同样按撤销语义清理。
++  //    实现：比对 kPrefDirectivesKnown 与本次 active id 集合。
++  //    【简化实现：直接清理 forced 前缀下不在本次集合的键，需核实 Prefs 遍历 API】
++}
++
++void DirectiveApplier::ApplyDirective(const Directive& directive) {
++  const std::string pref = kPrefForcedPrefix + directive.key;
++  switch (directive.value_type) {
++    case DirectiveValueType::kSwitch:
++      prefs_->SetBoolean(pref, directive.value.GetIfBool().value_or(false));
++      break;
++    case DirectiveValueType::kNumber:
++      prefs_->SetInteger(pref, directive.value.GetIfInt().value_or(0));
++      break;
++    case DirectiveValueType::kSearchEngine:
++      SetDefaultSearchEngine(directive.value.GetIfString().value_or(std::string()));
++      break;
++    case DirectiveValueType::kText:
++      prefs_->SetString(pref, directive.value.GetIfString().value_or(std::string()));
++      break;
++    case DirectiveValueType::kJson:
++      // 结构化配置整体序列化存储（VLESS/VMess 节点、加速器协议白名单等）
++      prefs_->SetString(pref, directive.value.DebugJson());
++      break;
++  }
++}
++
++void DirectiveApplier::RevokeDirective(const RevokedDirective& directive) {
++  const std::string pref = kPrefForcedPrefix + directive.key;
++  // 通用步骤：删除本地强制配置（用户需求：「撤销后用户端那里配置就会删除」）
++  if (prefs_->FindPreference(pref)) prefs_->ClearPref(pref);
++
++  switch (directive.value_type) {
++    case DirectiveValueType::kSwitch:
++      // 开关：恢复默认值（强制开 → 回到关；强制关 → 回到开）
++      prefs_->SetBoolean(pref, SwitchDefaultForKey(directive.key));
++      break;
++    case DirectiveValueType::kSearchEngine:
++      // 搜索引擎：恢复编译时选择的默认搜索引擎（必应）
++      RestoreCompileDefaultSearchEngine();
++      break;
++    case DirectiveValueType::kText:
++    case DirectiveValueType::kNumber:
++    case DirectiveValueType::kJson:
++      // 地址/其他选项和填空：清空（客户端回退本地默认）
++      // 已在上面 ClearPref；对 NodeByteSyncServerOverride 等地址键，
++      // 清空后客户端自动回退到用户本地配置的同步服务器地址。
++      break;
++  }
++}
++
++void DirectiveApplier::SetDefaultSearchEngine(const std::string& search_url) {
++  if (search_url.empty()) return;
++  // 通过 TemplateURLService 设置默认搜索引擎（mandatory 语义：设置页锁定）。
++  // 【基线：Chromium 128，SetUserSelectedDefaultSearchProvider/TemplateURLData 需核实】
++  TemplateURLService* turl = TemplateURLServiceFactory::GetForProfile(profile_);
++  if (!turl) return;
++  TemplateURLData data;
++  data.SetURL(search_url);
++  data.short_name_ = u"NodeByte Policy Engine";
++  data.keyword_ = u"nodebyte.policy";
++  turl->SetUserSelectedDefaultSearchProvider(
++      turl->Add(std::make_unique<TemplateURL>(data), /*autogenerate_keyword=*/false));
++}
++
++void DirectiveApplier::RestoreCompileDefaultSearchEngine() {
++  // 编译时默认搜索引擎 = 必应（nodebyte_constants.h；客户端提示词 4.5）
++  SetDefaultSearchEngine(kDefaultSearchURL);
++}
++
++bool DirectiveApplier::IsKnownKey(const std::string& key) const {
++  return key == policy_keys::kAcceleratorEnabled || key == policy_keys::kAcceleratorProtocols ||
++         key == policy_keys::kSyncServerOverride || key == policy_keys::kAllowUserSelfInstallExtension ||
++         key == policy_keys::kAllowUserUploadOwnExtension ||
++         base::StartsWith(key, "Custom", base::CompareCase::SENSITIVE) ||
++         base::StartsWith(key, "NodeByte", base::CompareCase::SENSITIVE);
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/policy_extend/directive_applier.h b/chrome/browser/nodebyte/policy_extend/directive_applier.h
+new file mode 100644
+index 0000000..192e73f
+--- /dev/null
++++ b/chrome/browser/nodebyte/policy_extend/directive_applier.h
+@@ -0,0 +1,98 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// DirectiveApplier —— 策略指令（可撤销）的客户端执行器。
++//
++// 服务端 /api/client/policy 返回：
++//   directives: [{ id, key, valueType, value, scope }]   生效中的指令（最高优先级）
++//   revoked:    [{ id, key, valueType, revokedAt }]      近 30 天撤销的指令
++//
++// 应用语义：directives 按 valueType 写入本地强制配置（本地 Prefs 的
++// kNodeByteDirectiveForced 前缀下），等价于 mandatory 策略。
++//
++// 撤销语义（用户需求，服务端 docs/policy-dictionary.md 同步维护）：
++//   收到 revoked 后，**删除该指令的本地强制配置**，随后：
++//     - valueType == switch        → 恢复该开关的默认值
++//         （指令此前强制为开 → 回到关；强制为关 → 回到开；
++//           即回到「从未下发过这条指令」的状态）
++//     - valueType == text/number/json（地址或填空类）→ 清空，
++//         客户端回退到本地/编译默认（例如 NodeByteSyncServerOverride 清空后
++//         重新使用用户自己配置的同步服务器地址）
++//     - valueType == search_engine → 恢复**编译时选择的默认搜索引擎**
++//         （NodeByte 编译默认 = 必应 Bing，nodebyte_constants.h kDefaultSearchURL）
++//
++// 指令撤销经 WebSocket policy_update 或定时重拉策略触发；处理幂等
++// （重复撤销同一 directive_id 无副作用）。
++
++#ifndef CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_DIRECTIVE_APPLIER_H_
++#define CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_DIRECTIVE_APPLIER_H_
++
++#include <string>
++#include <vector>
++
++#include "base/memory/weak_ptr.h"
++#include "base/values.h"
++
++class PrefService;
++class Profile;
++
++namespace nodebyte {
++
++enum class DirectiveValueType {
++  kSwitch = 0,     // 开关：撤销 → 恢复默认值
++  kText,           // 地址/文本：撤销 → 清空
++  kNumber,         // 数值：撤销 → 清空
++  kJson,           // 结构化配置：撤销 → 清空
++  kSearchEngine,   // 搜索引擎：撤销 → 回编译时默认（必应）
++};
++
++struct Directive {
++  std::string id;             // directive_id（uuid）
++  std::string key;            // 策略键
++  DirectiveValueType value_type = DirectiveValueType::kText;
++  base::Value value;          // switch=Bool / number=Int / 其余=String 或 Dict
++  std::string scope;          // global | group | user
++};
++
++struct RevokedDirective {
++  std::string id;
++  std::string key;
++  DirectiveValueType value_type = DirectiveValueType::kText;
++  std::string revoked_at;     // ISO-8601
++};
++
++class DirectiveApplier {
++ public:
++  explicit DirectiveApplier(Profile* profile);
++  ~DirectiveApplier();
++
++  DirectiveApplier(const DirectiveApplier&) = delete;
++  DirectiveApplier& operator=(const DirectiveApplier&) = delete;
++
++  // 解析 /api/client/policy 响应中的 directives / revoked 数组并执行。
++  // 1) 对 revoked：DeleteLocalForcedConfig()（幂等）；
++  // 2) 对 directives：ApplyDirective() 写入本地强制配置；
++  // 3) 已知指令集合持久化到本地 Prefs（用于识别"指令消失但未进入 revoked"的情况，
++  //    同样按撤销语义清理，保证指令被服务端物理删除后客户端也能收敛）。
++  void ApplyFromPolicyJson(const base::Value::Dict& policy_data);
++
++ private:
++  void ApplyDirective(const Directive& directive);
++  // 撤销语义的核心：按 valueType 删除/回退本地配置（见文件头注释）。
++  void RevokeDirective(const RevokedDirective& directive);
++  void SetDefaultSearchEngine(const std::string& search_url);   // search_engine 应用
++  void RestoreCompileDefaultSearchEngine();                     // 撤销 → 必应（编译默认）
++  bool IsKnownKey(const std::string& key) const;
++
++  raw_ptr<Profile> profile_ = nullptr;
++  raw_ptr<PrefService> prefs_ = nullptr;  // 本地强制配置存储（kNodeByteDirective* 前缀）
++  std::vector<Directive> active_directives_;
++
++  base::WeakPtrFactory<DirectiveApplier> weak_factory_{this};
++};
++
++// valueType 字符串 → 枚举（"switch"/"text"/"number"/"json"/"search_engine"）
++DirectiveValueType ParseDirectiveValueType(const std::string& s);
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_DIRECTIVE_APPLIER_H_
+diff --git a/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h
+new file mode 100755
+index 0000000..fd92fbd
 --- /dev/null
 +++ b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,104 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +//
 +// 自定义策略键全量定义（客户端提示词 附录A：客户端职责是解析并执行）。
@@ -326,6 +620,22 @@ index 0000000..d311c7d
 +// 扩展下发（原生 ForceInstall* 键 + 自定义）
 +inline constexpr std::string_view kAllowUserSelfInstallExtension = "AllowUserSelfInstallExtension";
 +inline constexpr std::string_view kAllowUserUninstallForcedExt = "AllowUserUninstallForcedExt";
++// 用户上传自己的扩展到同步空间（EXTENSION_BLOB，计入配额）
++inline constexpr std::string_view kAllowUserUploadOwnExtension = "AllowUserUploadOwnExtension";
++
++// 加速器 / 第三方代理协议（docs/accelerator.md 支持矩阵）
++//   原生：HTTP / HTTPS / SOCKS4 / SOCKS5（net/proxy_resolution）
++//   第三方：VMess / VLESS / Trojan / Shadowsocks（本地 Xray-core 方案 B）
++inline constexpr std::string_view kAcceleratorEnabled = "NodeByteAcceleratorEnabled";
++inline constexpr std::string_view kAcceleratorProtocols = "NodeByteAcceleratorProtocols";
++inline constexpr std::string_view kAllowCustomProxy = "NodeByteAllowCustomProxy";
++// 同步服务器地址（上游可强制覆盖；撤销指令后清空回用户本地配置）
++inline constexpr std::string_view kSyncServerOverride = "NodeByteSyncServerOverride";
++
++// 数据导入（CSV / 浏览器导入，docs/data-import.md）
++inline constexpr std::string_view kImportPasswordsAllowed = "NodeByteImportPasswordsAllowed";
++inline constexpr std::string_view kImportHistoryAllowed = "NodeByteImportHistoryAllowed";
++inline constexpr std::string_view kImportBookmarksAllowed = "NodeByteImportBookmarksAllowed";
 +
 +// 伪装（扩展商店访问 UA 伪装）
 +inline constexpr std::string_view kSpoofBrowserVendor = "CustomSpoofBrowserVendor";

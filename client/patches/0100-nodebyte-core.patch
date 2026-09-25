@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/nodebyte_constants.h b/chrome/browser/nodebyte/nodebyte_constants.h
-new file mode 100644
+new file mode 100755
 index 0000000..af5da58
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_constants.h
@@ -51,7 +51,7 @@ index 0000000..af5da58
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_CONSTANTS_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_protocol.h b/chrome/browser/nodebyte/nodebyte_protocol.h
-new file mode 100644
+new file mode 100755
 index 0000000..f0760a2
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_protocol.h
@@ -79,7 +79,7 @@ index 0000000..f0760a2
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_PROTOCOL_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_protocol.cc b/chrome/browser/nodebyte/nodebyte_protocol.cc
-new file mode 100644
+new file mode 100755
 index 0000000..df326ed
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_protocol.cc
@@ -118,7 +118,7 @@ index 0000000..df326ed
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/nodebyte_branding.h b/chrome/browser/nodebyte/nodebyte_branding.h
-new file mode 100644
+new file mode 100755
 index 0000000..4b560c4
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_branding.h
@@ -155,7 +155,7 @@ index 0000000..4b560c4
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_BRANDING_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_branding.cc b/chrome/browser/nodebyte/nodebyte_branding.cc
-new file mode 100644
+new file mode 100755
 index 0000000..e3bb366
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_branding.cc
@@ -192,7 +192,7 @@ index 0000000..e3bb366
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/mojo/nodebyte.mojom b/chrome/browser/nodebyte/mojo/nodebyte.mojom
-new file mode 100644
+new file mode 100755
 index 0000000..d1cd43e
 --- /dev/null
 +++ b/chrome/browser/nodebyte/mojo/nodebyte.mojom

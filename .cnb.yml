@@ -1,0 +1,68 @@
+# CNB（cnb.cool）云原生构建配置
+# ---------------------------------------------------------------------
+# 设计原则（用户要求：确保编译成功、不浪费免费核时）：
+#   1) push 默认只跑「轻量校验」：服务端安装+类型检查+构建（分钟级）+
+#      客户端补丁干跑校验 + Shell 语法检查 —— 全部确定性通过，不烧核时；
+#   2) Chromium 全量编译（小时级、数十 GB）默认不在 CNB 云端跑，
+#      用 web_trigger 手动触发（或自托管构建机，见 docs/build-client.md），
+#      避免每次 push 白白烧光免费额度。
+# 文档：docs/build-cnb.md
+
+main:
+  push:
+    - name: nodebyte-lite-validate
+      docker:
+        image: node:20-bookworm
+        volumes:
+          - /root/.npm-cache:/root/.npm
+      stages:
+        - name: 环境自检
+          script:
+            - node --version
+            - git --version
+            - bash --version | head -1
+        - name: Shell 脚本语法检查（客户端构建脚本全量）
+          script:
+            - bash -n client/scripts/sync_chromium.sh
+            - bash -n client/scripts/sync_chromium_android.sh
+            - bash -n client/scripts/apply_patches.sh
+            - bash -n client/scripts/build_pc.sh
+            - bash -n client/scripts/build_android.sh
+            - bash -n client/scripts/gen_patches.sh
+            - bash -n client/scripts/package_linux.sh
+            - bash -n client/scripts/package_windows.sh
+            - bash -n scripts/release.sh
+            - echo "shell syntax OK"
+        - name: 客户端补丁干跑校验（新增文件型补丁必须全部可干净应用）
+          script:
+            - REPO_DIR=$(pwd)
+            - git init -q /tmp/patch-check
+            - cd /tmp/patch-check
+            - for p in ${REPO_DIR}/client/patches/01*.patch; do git apply --check "$p" || exit 1; echo "patch OK: $(basename $p)"; done
+        - name: 服务端安装与类型检查
+          script:
+            - cd server && npm ci --cache /root/.npm --prefer-offline --no-audit --fund=false
+            - npx tsc --noEmit
+        - name: 服务端构建（Next.js standalone）
+          script:
+            - cd server && NEXT_BUILD_MODE=standalone npm run build
+            - test -f .next/standalone/server.js && echo "standalone build OK"
+        - name: CSV 导入解析自检（零依赖 Node 单测）
+          script:
+            - node server/scripts/csv-selftest.mjs
+
+  # 手动触发（CNB 网页 → 构建 → web_trigger）：Chromium 全量编译
+  # 仅在确有产物需求时手动运行，避免烧核时。
+  web_trigger:
+    - name: nodebyte-chromium-build
+      docker:
+        image: ubuntu:24.04
+      runner:
+        cpus: 16
+      stages:
+        - name: 预检（磁盘/内存不足立即失败，不进入长编译）
+          script:
+            - bash client/scripts/ci_precheck.sh
+        - name: 安装依赖 + depot_tools + 官方源码 + 补丁 + 编译
+          script:
+            - bash client/scripts/ci_build_all.sh

@@ -85,6 +85,62 @@
 | `allow_share_session_context` | true | 发起会话分享 |
 | `allow_forward_shared_session` | **false** | 转发外部会话（默认关闭防扩散） |
 
+## 加速器 / 第三方协议（v1.3.0）
+
+| 键 | 类型 | 执行点 |
+|---|---|---|
+| `NodeByteAcceleratorEnabled` | bool | 加速器总开关（设置页 nodebyte://settings → 加速器） |
+| `NodeByteAcceleratorProtocols` | string[] | 允许的第三方协议：vmess/vless/trojan/shadowsocks/socks5/http/https |
+| `NodeByteAllowCustomProxy` | bool | 用户自定义/新增节点入口 |
+| `AllowUserUploadOwnExtension` | bool | 用户上传自己的扩展到同步空间 |
+
+完整支持矩阵见 docs/accelerator.md（HTTP/HTTPS/SOCKS4/SOCKS5 原生栈 +
+VMess/VLESS/Trojan/SS 经本地 Xray 方案 B + 订阅链接）。
+
+## 数据导入（v1.3.0）
+
+| 键 | 类型 | 执行点 |
+|---|---|---|
+| `NodeByteImportPasswordsAllowed` | bool | CSV/浏览器导入密码入口（本机 + 账号下发均拒收） |
+| `NodeByteImportHistoryAllowed` | bool | 同上（历史记录） |
+| `NodeByteImportBookmarksAllowed` | bool | 同上（书签） |
+
+见 docs/data-import.md（三通道：本机 CSV / 账号待下发区 / 浏览器一键导入）。
+
+## 五、策略指令（下发 / 撤销，v1.3.0）★
+
+在三层策略（全局 < 用户组 < 用户 override）之上新增**指令**通道，作用域支持
+global / group / user，按 valueType 四类语义下发与撤销：
+
+### 5.1 下发
+
+`POST /api/admin/directives { action:'create', scope, scopeId?, key, valueType, value, note }`
+生效指令随 `/api/client/policy` 的 `directives[]` 返回（**优先级高于一切策略**），
+客户端 `DirectiveApplier` 写入本地强制配置（`nodebyte.directive.forced.<key>`）。
+
+### 5.2 撤销语义（用户需求原文实现）
+
+`POST /api/admin/directives { action:'revoke', directiveId, note? }` →
+`/api/client/policy` 的 `revoked[]`（近 30 天）+ WebSocket `policy_update` 即时通知；
+**客户端删除该指令的本地强制配置**：
+
+| valueType | 撤销后客户端行为 |
+|---|---|
+| `switch`（开关） | 恢复**默认值**：指令此前强制为开 → 回到**关**；强制为关 → 回到**开**（即回到从未下发过的状态） |
+| `text`（地址/填空） | **清空**。例如 `NodeByteSyncServerOverride` 清空后回退用户本地配置的同步服务器地址；`HomepageLocation` 清空后回退编译默认 |
+| `number` / `json` | **清空**（回退本地/编译默认） |
+| `search_engine`（搜索引擎） | 恢复**编译时选择的默认搜索引擎**（必应 Bing，nodebyte_constants.h `kDefaultSearchURL`） |
+
+客户端幂等处理：重复撤销同一 directive_id 无副作用；指令被服务端物理删除时
+（既不在 directives 也不在 revoked）客户端同样按撤销语义收敛清理。
+
+### 5.3 注册表
+
+服务端 `server/src/lib/directive-registry.ts`（39 个常用键 + 默认值 + 高危标记），
+客户端 `directive_applier.cc` SwitchDefaultForKey 对齐；未知键允许下发，
+按 text 语义撤销。高危开关（如 CustomDisableRendererSandbox）开启需二次确认
+（`confirmHighRisk: true`）并写审计。
+
 ## 策略变更处理
 
 - WebSocket `policy_update` 通知或定时（15 分钟）重新拉取；

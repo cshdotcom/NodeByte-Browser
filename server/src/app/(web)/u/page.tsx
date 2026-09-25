@@ -10,9 +10,9 @@ type Me = {
 };
 
 function Shell() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [me, setMe] = useState<Me | null>(null);
-  const [tab, setTab] = useState<'profile' | 'security' | 'devices' | 'logs'>('profile');
+  const [tab, setTab] = useState<'profile' | 'security' | 'devices' | 'logs' | 'import'>('profile');
   const [msg, setMsg] = useState('');
 
   const load = useCallback(async () => {
@@ -51,14 +51,15 @@ function Shell() {
           </div>
         )}
         <div className="tabs" style={{ marginTop: 16 }}>
-          {(['profile', 'security', 'devices', 'logs'] as const).map((k) => (
-            <div key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{t(k)}</div>
+          {(['profile', 'security', 'devices', 'logs', 'import'] as const).map((k) => (
+            <div key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{k === 'import' ? (lang === 'zh' ? '数据导入' : 'Import') : t(k)}</div>
           ))}
         </div>
         {tab === 'profile' && me && <ProfileCard me={me} onMsg={setMsg} reload={load} />}
         {tab === 'security' && <SecurityCard onMsg={setMsg} />}
         {tab === 'devices' && <DevicesCard onMsg={setMsg} reload={load} />}
         {tab === 'logs' && <LogsCard />}
+        {tab === 'import' && <ImportCard onMsg={setMsg} reload={load} />}
       </div>
     </div>
   );
@@ -182,6 +183,69 @@ function DevicesCard({ onMsg, reload }: { onMsg: (s: string) => void; reload: ()
 }
 
 type Log = { log_id: string; event_type: string; detail: Record<string, unknown>; ip_address: string; created_at: string };
+
+/* =====================================================================
+   数据导入（自助）：CSV 导入到**自己**的账号（密码/书签/历史）。
+   与管理端导入共用解析与执行引擎；导入数据计入个人云配额。
+   ===================================================================== */
+
+const IMPORT_TYPE_LABEL_SELF: Record<string, string> = { passwords: '密码', bookmarks: '书签', history: '历史记录' };
+
+function ImportCard({ onMsg, reload }: { onMsg: (s: string) => void; reload: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [type, setType] = useState<'passwords' | 'bookmarks' | 'history'>('passwords');
+  const [mode, setMode] = useState<'merge' | 'replace'>('merge');
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Record<string, number> | null>(null);
+
+  const loadPending = useCallback(async () => {
+    const r = await api<{ pending: Record<string, number> }>('/api/personal/import', { headers: bearerHeaders() });
+    if (r.code === 0) setPending(r.data?.pending ?? {});
+  }, []);
+  useEffect(() => { loadPending(); }, [loadPending]);
+
+  const doImport = async () => {
+    if (!file) return;
+    if (!window.confirm(`将 ${IMPORT_TYPE_LABEL_SELF[type]}导入到你自己的账号（${mode === 'replace' ? '覆盖模式，现有待下发数据将被清空' : '合并模式'}），确定？`)) return;
+    setBusy(true);
+    const fd = new FormData();
+    fd.append('file', file); fd.append('type', type); fd.append('mode', mode);
+    const r = await fetch('/api/personal/import', { method: 'POST', headers: bearerHeaders(), body: fd })
+      .then((x) => x.json()).catch(() => ({ code: -1, message: '网络错误' }));
+    setBusy(false);
+    onMsg(r.message ?? '');
+    if (r.code === 0) { setFile(null); loadPending(); reload(); }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">导入到我的账号</div>
+      <p className="hint">
+        支持从常见浏览器导出的 CSV 导入：密码（Chrome/Edge/Firefox/Bitwarden 导出格式自动识别列）、书签（title,url,folder）、历史（url,title,time）。
+        导入后数据进入你的账号「待下发区」，NodeByte 浏览器登录同步时自动并入本机端到端加密存储；密码服务端仅静态加密暂存，浏览器确认后副本删除。
+        浏览器设置内也可直接导入 CSV（nodebyte://settings → 数据导入）。
+      </p>
+      <div className="row" style={{ marginTop: 10 }}>
+        <select className="input" style={{ width: 150 }} value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+          <option value="passwords">密码（CSV）</option>
+          <option value="bookmarks">书签（CSV）</option>
+          <option value="history">历史记录（CSV）</option>
+        </select>
+        <select className="input" style={{ width: 150 }} value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+          <option value="merge">合并模式</option>
+          <option value="replace">覆盖模式</option>
+        </select>
+        <input type="file" accept=".csv,text/csv" className="input" style={{ width: 240 }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <button className="btn btn-primary btn-sm" disabled={busy || !file} onClick={doImport}>导入（二次确认）</button>
+      </div>
+      {pending && (
+        <p className="hint" style={{ marginTop: 8 }}>
+          待下发：密码 {pending['passwords'] ?? 0} 条 · 书签 {pending['bookmarks'] ?? 0} 条 · 历史 {pending['history'] ?? 0} 条
+        </p>
+      )}
+    </div>
+  );
+}
 
 function LogsCard() {
   const [type, setType] = useState<'security' | 'sync'>('security');

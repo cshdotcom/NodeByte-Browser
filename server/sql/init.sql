@@ -302,6 +302,84 @@ CREATE TABLE IF NOT EXISTS password_reset_request (
 );
 
 -- ---------------------------------------------------------------------
+-- 6a. 数据批量导入（CSV）：管理端批量选用户导入 / 个人中心自助导入（导入到自己账号）
+--     密码列服务端静态加密存储（AES-256-GCM）；客户端经 /api/sync/imported 拉取
+--     并转为本地加密同步数据后 ack，服务端副本随即删除（端到端收敛）。
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS import_batch (
+  batch_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  data_type   text NOT NULL CHECK (data_type IN ('passwords','bookmarks','history')),
+  mode        text NOT NULL DEFAULT 'merge' CHECK (mode IN ('merge','replace')),
+  source      text NOT NULL DEFAULT 'admin_csv' CHECK (source IN ('admin_csv','self_csv')),
+  imported_by uuid,
+  target_count integer NOT NULL DEFAULT 0,
+  row_count    integer NOT NULL DEFAULT 0,
+  file_name    text,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_imported_passwords (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  batch_id    uuid NOT NULL REFERENCES import_batch(batch_id) ON DELETE CASCADE,
+  origin      text NOT NULL DEFAULT '',        -- 来源浏览器/站点名（Chrome 导出 name 列等）
+  name        text NOT NULL DEFAULT '',
+  url         text NOT NULL DEFAULT '',
+  username    text NOT NULL DEFAULT '',
+  password_enc text NOT NULL,                  -- 服务端静态加密（AES-256-GCM）
+  imported_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_impwd_user ON user_imported_passwords(user_id, imported_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_imported_bookmarks (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  batch_id    uuid NOT NULL REFERENCES import_batch(batch_id) ON DELETE CASCADE,
+  title       text NOT NULL DEFAULT '',
+  url         text NOT NULL DEFAULT '',
+  folder      text NOT NULL DEFAULT '',        -- 书签文件夹（支持 / 分层）
+  date_added  timestamptz,
+  imported_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ibmk_user ON user_imported_bookmarks(user_id, imported_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_imported_history (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  batch_id    uuid NOT NULL REFERENCES import_batch(batch_id) ON DELETE CASCADE,
+  url         text NOT NULL DEFAULT '',
+  title       text NOT NULL DEFAULT '',
+  visited_at  timestamptz,
+  visit_count integer NOT NULL DEFAULT 1,
+  imported_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ihis_user ON user_imported_history(user_id, imported_at DESC);
+
+-- ---------------------------------------------------------------------
+-- 6b. 策略指令（服务端下发的指令，可撤销）
+--     撤销语义（用户需求）：客户端删除该指令的本地强制配置 ——
+--       开关      → 恢复默认值（指令强制开则回到关、强制关则回到开，即回到未下发前状态）
+--       地址/文本/数字/JSON → 清空（客户端回退到本地默认）
+--       搜索引擎  → 回到编译时选择的默认搜索引擎（必应）
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS policy_directive (
+  directive_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope        text NOT NULL CHECK (scope IN ('global','group','user')),
+  scope_id     uuid,                             -- group/user 时为目标 ID；global 为 NULL
+  key          text NOT NULL,
+  value_type   text NOT NULL DEFAULT 'switch' CHECK (value_type IN ('switch','text','number','json','search_engine')),
+  value_json   jsonb NOT NULL DEFAULT 'null'::jsonb,
+  note         text NOT NULL DEFAULT '',
+  is_active    boolean NOT NULL DEFAULT true,
+  created_by   uuid,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  revoked_at   timestamptz,
+  revoke_note  text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_directive_scope ON policy_directive(scope, scope_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_directive_key ON policy_directive(key);
+
+-- ---------------------------------------------------------------------
 -- 7. 种子数据（bootstrap.mjs 会补充管理员与默认组）
 -- ---------------------------------------------------------------------
 INSERT INTO system_setting (setting_key, setting_value) VALUES

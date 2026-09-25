@@ -111,9 +111,13 @@ docker compose up -d            # PostgreSQL + RustFS + WS 信令 + NodeByte Ser
 | 文档 | 内容 |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | 总体架构、业务主链路、低侵入原则、状态码约定 |
+| [docs/feature-checklist.md](docs/feature-checklist.md) | **两份开发提示词逐项对照检查表**（v1.3） |
+| [docs/data-import.md](docs/data-import.md) | 数据导入体系：CSV 批量导入（管理端/个人中心/浏览器）、浏览器导入、同步项勾选（v1.3） |
+| [docs/accelerator.md](docs/accelerator.md) | 加速器与第三方代理协议矩阵：HTTP/HTTPS/SOCKS4/5 + VMess/VLESS/Trojan/SS + 订阅（v1.3） |
 | [docs/build-client.md](docs/build-client.md) | 自托管 Runner 搭建与 Chromium 编译全流程 |
+| [docs/build-cnb.md](docs/build-cnb.md) | CNB 云原生构建（双平台策略：轻量校验默认跑/重编译手动触发）（v1.3） |
 | [docs/deploy-server.md](docs/deploy-server.md) | 服务端部署（All-in-One/compose、环境变量、S3 桶、反代） |
-| [docs/policy-dictionary.md](docs/policy-dictionary.md) | 全部策略键与客户端执行点对照 |
+| [docs/policy-dictionary.md](docs/policy-dictionary.md) | 全部策略键与客户端执行点对照（含策略指令下发/撤销语义） |
 | [docs/api-contract.md](docs/api-contract.md) | 接口契约与 WebSocket 信令协议 |
 | [docs/roadmap.md](docs/roadmap.md) | v0.1 → v1.5 迭代路线 |
 

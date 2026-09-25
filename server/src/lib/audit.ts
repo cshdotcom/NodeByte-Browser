@@ -14,6 +14,7 @@ export type AuditOp =
   | 'share_session_revoke' | 'extension_install_result' | 'admin_verify' | 'create_group'
   | 'modify_group' | 'delete_group' | 'create_policy_set' | 'modify_policy_set' | 'delete_policy_set'
   | 'upload_extension_package' | 'assign_forced_extension' | 'remove_forced_extension'
+  | 'import_data_to_users' | 'create_policy_directive' | 'revoke_policy_directive'
   | 'modify_system_setting' | 'collab_moderation' | 'admin_login';
 
 export async function adminAudit(params: {

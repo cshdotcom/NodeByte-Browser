@@ -15,7 +15,7 @@ type Stats = {
 
 function Shell() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
   const [me, setMe] = useState<{ username: string; isAdmin: boolean } | null>(null);
 
   useEffect(() => {
@@ -41,6 +41,7 @@ function Shell() {
       <div className="container">
         <div className="tabs">
           {([['stats', t('overview')], ['users', t('users')], ['groups', t('groups')], ['policy', t('policy')],
+             ['directives', t('directives')], ['import', t('importCenter')],
              ['files', t('files')], ['ext', t('extensions')], ['audit', t('audit')], ['settings', t('settings')]] as const).map(([k, label]) => (
             <div key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{label}</div>
           ))}
@@ -49,6 +50,8 @@ function Shell() {
         {tab === 'users' && <UsersPanel />}
         {tab === 'groups' && <GroupsPanel />}
         {tab === 'policy' && <PolicyPanel />}
+        {tab === 'directives' && <DirectivesPanel />}
+        {tab === 'import' && <ImportPanel />}
         {tab === 'files' && <FilesPanel />}
         {tab === 'ext' && <ExtPanel />}
         {tab === 'audit' && <AuditPanel />}
@@ -613,6 +616,364 @@ function SettingsPanel() {
         }}>保存全局策略</button>
       </div>
       <p className="hint">SMTP 配置（smtp_config）由环境变量或此处 JSON 提供；WebSocket 信令与 SFU 为独立服务，通过反向代理暴露 wss://。</p>
+    </div>
+  );
+}
+
+/* =====================================================================
+   导入中心（CSV 批量导入）：批量选择用户 → 导入密码/书签/历史
+   流程：选类型 + 传 CSV → 服务端解析预览（列映射/告警） → 批量选用户
+        （搜索 / 组筛选 / 全选） → 二次确认 → 执行 → 结果报告（docs/data-import.md）
+   ===================================================================== */
+
+type ImportPreview = {
+  type: string; fileName: string; totalRows: number; validRows: number;
+  warnings: string[]; mapping: Record<string, number>;
+  preview: Array<Record<string, string>>;
+};
+
+const IMPORT_TYPE_LABEL: Record<string, string> = { passwords: '密码', bookmarks: '书签', history: '历史记录' };
+
+function ImportPanel() {
+  const { t } = useI18n();
+  const [file, setFile] = useState<File | null>(null);
+  const [type, setType] = useState<'passwords' | 'bookmarks' | 'history'>('passwords');
+  const [mode, setMode] = useState<'merge' | 'replace'>('merge');
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // 用户多选
+  const [rows, setRows] = useState<UserRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [allUsers, setAllUsers] = useState(false);
+
+  const loadUsers = useCallback(async () => {
+    const p = new URLSearchParams({ page: String(page), pageSize: '10', q });
+    const r = await api<{ total: number; users: UserRow[] }>(`/api/admin/users?${p}`, { headers: bearerHeaders() });
+    if (r.code === 0) { setRows(r.data?.users ?? []); setTotal(r.data?.total ?? 0); }
+  }, [page, q]);
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const doPreview = async () => {
+    setMsg(''); setPreview(null);
+    if (!file) { setMsg('请先选择 CSV 文件'); return; }
+    setBusy(true);
+    const fd = new FormData();
+    fd.append('file', file); fd.append('type', type);
+    const r = await fetch('/api/admin/import', { method: 'POST', headers: bearerHeaders(), body: fd })
+      .then((x) => x.json()).catch(() => ({ code: -1, message: '网络错误' }));
+    setBusy(false);
+    if (r.code === 0) setPreview(r.data);
+    else setMsg(r.message ?? '解析失败');
+  };
+
+  const doApply = async () => {
+    if (!file) return;
+    const targetCount = allUsers ? total : sel.size;
+    if (!allUsers && sel.size === 0) { setMsg('请先勾选目标用户（或选择「全部用户」）'); return; }
+    if (!window.confirm(`二次确认：将 ${IMPORT_TYPE_LABEL[type]} ${preview?.validRows ?? '?'} 条导入到 ${allUsers ? `全部用户（${total} 个）` : `${targetCount} 个所选用户`}，${mode === 'replace' ? '该类型现有待下发数据将被清空' : '并保留现有数据'}。确定执行？`)) return;
+    setBusy(true);
+    const fd = new FormData();
+    fd.append('file', file); fd.append('type', type); fd.append('mode', mode);
+    fd.append('targets', JSON.stringify(allUsers ? { allUsers: true } : { userIds: [...sel] }));
+    const r = await fetch('/api/admin/import/apply', { method: 'POST', headers: bearerHeaders(), body: fd })
+      .then((x) => x.json()).catch(() => ({ code: -1, message: '网络错误' }));
+    setBusy(false);
+    setMsg(r.message ?? '');
+    if (r.code === 0) setPreview(null);
+  };
+
+  return (
+    <>
+      {msg && <div className={`notice ${msg.includes('完成') ? 'notice-ok' : 'notice-danger'}`}>{msg}</div>}
+      <div className="card">
+        <div className="card-title">CSV 批量导入 · 第 1 步：选择类型并上传</div>
+        <p className="hint">
+          支持格式：密码（Chrome/Edge/Firefox/Bitwarden 导出 CSV，列 url/username/password 自动识别）；
+          书签（title,url,folder,date_added）；历史（url,title,last_visit_time,visit_count）。
+          导入后进入目标用户「待下发区」，浏览器登录同步时自动并入本地加密数据；密码服务端仅静态加密存储，客户端确认后服务端副本删除。
+        </p>
+        <div className="row" style={{ marginTop: 10 }}>
+          <select className="input" style={{ width: 150 }} value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+            <option value="passwords">密码（CSV）</option>
+            <option value="bookmarks">书签（CSV）</option>
+            <option value="history">历史记录（CSV）</option>
+          </select>
+          <input type="file" accept=".csv,text/csv" className="input" style={{ width: 260 }}
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPreview(null); }} />
+          <button className="btn btn-primary btn-sm" disabled={busy || !file} onClick={doPreview}>解析预览</button>
+        </div>
+      </div>
+
+      {preview && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-title">第 2 步：解析结果确认 · {preview.fileName}</div>
+          <div className="row" style={{ gap: 16 }}>
+            <span className="badge badge-ok">有效行 {preview.validRows}</span>
+            <span className="badge badge-dim">总行数 {preview.totalRows}</span>
+            {preview.warnings.length > 0 && <span className="badge badge-danger">告警 {preview.warnings.length} 条</span>}
+          </div>
+          {preview.warnings.length > 0 && (
+            <div className="notice notice-danger" style={{ marginTop: 8 }}>
+              {preview.warnings.slice(0, 5).map((w, i) => <div key={i} className="mono" style={{ fontSize: 12 }}>{w}</div>)}
+              {preview.warnings.length > 5 && <div className="muted">…共 {preview.warnings.length} 条</div>}
+            </div>
+          )}
+          <div className="table-wrap" style={{ marginTop: 10 }}>
+            <table className="tbl">
+              <thead><tr>{type === 'passwords'
+                ? <><th>名称/来源</th><th>URL</th><th>用户名</th><th>密码</th></>
+                : type === 'bookmarks'
+                  ? <><th>标题</th><th>URL</th><th>文件夹</th></>
+                  : <><th>标题</th><th>URL</th><th>访问时间</th><th>次数</th></>}</tr></thead>
+              <tbody>
+                {preview.preview.map((row, i) => (
+                  <tr key={i}>
+                    {Object.values(row).map((v, j) => (
+                      <td key={j} className="mono" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {j === 3 && type === 'passwords' ? '••••••••' : String(v).slice(0, 60)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-title row-between">
+          <span>第 3 步：选择目标用户（一个或多个）</span>
+          <label className="row" style={{ gap: 6, fontSize: 13 }}>
+            <input type="checkbox" checked={allUsers} onChange={(e) => setAllUsers(e.target.checked)} />
+            全部用户（跳过逐个勾选）
+          </label>
+        </div>
+        {!allUsers && (
+          <>
+            <div className="row">
+              <input className="input" style={{ width: 220 }} placeholder={t('search') + ' 用户名/邮箱'} value={q}
+                onChange={(e) => { setPage(1); setQ(e.target.value); }} />
+              <span className="muted">已选 {sel.size} 个 / 共 {total} 个用户（翻页累计保留勾选）</span>
+            </div>
+            <div className="table-wrap" style={{ marginTop: 10 }}>
+              <table className="tbl">
+                <thead><tr><th></th><th>用户</th><th>组</th><th>状态</th></tr></thead>
+                <tbody>
+                  {rows.map((u) => (
+                    <tr key={u.user_id}>
+                      <td><input type="checkbox" checked={sel.has(u.user_id)} onChange={(e) => {
+                        const n = new Set(sel); e.target.checked ? n.add(u.user_id) : n.delete(u.user_id); setSel(n);
+                      }} /></td>
+                      <td>{u.username}<div className="muted mono">{u.email}</div></td>
+                      <td>{u.group_name ?? '-'}</td>
+                      <td><span className={`badge ${u.account_status === 'active' ? 'badge-ok' : 'badge-danger'}`}>{u.account_status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="row-between" style={{ marginTop: 8 }}>
+              <span className="muted">共 {total} 条</span>
+              <div className="row">
+                <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
+                <span className="muted">{page}</span>
+                <button className="btn btn-ghost btn-sm" disabled={page * 10 >= total} onClick={() => setPage(page + 1)}>下一页</button>
+              </div>
+            </div>
+          </>
+        )}
+        <div className="row" style={{ marginTop: 12 }}>
+          <select className="input" style={{ width: 150 }} value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+            <option value="merge">合并模式（追加）</option>
+            <option value="replace">覆盖模式（清空后导入）</option>
+          </select>
+          <button className="btn btn-primary" disabled={busy || !preview} onClick={doApply}>执行导入（二次确认）</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* =====================================================================
+   策略指令（服务端下发，可撤销）
+   撤销语义：开关→恢复默认（强制开→关/强制关→开）；地址/文本→清空；
+            搜索引擎→回编译时默认（必应）。docs/policy-dictionary.md
+   ===================================================================== */
+
+type Directive = {
+  directive_id: string; scope: string; scope_id: string | null; key: string; value_type: string;
+  value_json: unknown; note: string; is_active: boolean; created_by_name: string;
+  created_at: string; revoked_at: string | null; revoke_note: string;
+};
+
+const DIRECTIVE_KEY_OPTIONS = [
+  'CustomRequire2FA', 'CustomLockSyncServer', 'CustomAllowMultiProfile', 'CustomAllowGuestMode', 'CustomAllowIncognito',
+  'CustomDisableRendererSandbox', 'CustomAllowSync', 'CustomAllowExportBackup', 'CustomAllowJavaScript',
+  'CustomAllowWebSockets', 'CustomAllowWsUnderHttps', 'ProxyMode', 'ProxyServer', 'ProxyBypassList',
+  'CustomProxyVlessConfig', 'NodeByteAcceleratorEnabled', 'NodeByteAcceleratorProtocols', 'NodeByteAllowCustomProxy',
+  'AllowUserSelfInstallExtension', 'AllowUserUploadOwnExtension', 'NodeByteDropEnabled', 'NodeByteDropBackupAllowed',
+  'NodeByteOfficeCollabEnabled', 'NodeByteReadLaterEnabled', 'NodeByteEbookEnabled', 'NodeByteEbookShareAllowed',
+  'NodeByteReadAloudEnabled', 'NodeBytePdfReadAloudEnabled', 'NodeByteImportPasswordsAllowed',
+  'NodeByteImportHistoryAllowed', 'NodeByteImportBookmarksAllowed', 'NodeByteHomepageCustomizationAllowed',
+  'NodeByteSidebarCustomizationAllowed', 'NodeByteOfflineGameEnabled', 'NodeByteAllowCustomSyncServer',
+  'HomepageLocation', 'NodeByteSyncServerOverride', 'DefaultSearchProviderEnabled', 'DefaultSearchProviderSearchURL'
+];
+
+function DirectivesPanel() {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<Directive[]>([]);
+  const [status, setStatus] = useState('all');
+  const [msg, setMsg] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const load = useCallback(async () => {
+    const r = await api<{ directives: Directive[] }>(`/api/admin/directives?status=${status}`, { headers: bearerHeaders() });
+    if (r.code === 0) setRows(r.data?.directives ?? []);
+  }, [status]);
+  useEffect(() => { load(); }, [load]);
+
+  const revoke = async (d: Directive) => {
+    const note = prompt(`撤销指令「${d.key}」，备注（可选）：`) ?? '';
+    if (note === null) return;
+    const semantic = d.value_type === 'switch'
+      ? '客户端将删除该开关的强制配置并恢复默认值（强制开→回到关；强制关→回到开）'
+      : d.value_type === 'search_engine'
+        ? '客户端搜索引擎将恢复为编译时默认（必应）'
+        : '客户端将清空该配置并回退本地默认值';
+    if (!window.confirm(`二次确认撤销：\n${d.key}（${d.value_type}）\n\n撤销后客户端本地强制配置将被删除：\n${semantic}\n\n确定撤销？`)) return;
+    const r = await api('/api/admin/directives', { method: 'POST', headers: bearerHeaders(), json: { action: 'revoke', directiveId: d.directive_id, note } });
+    setMsg(r.message); load();
+  };
+
+  const renderValue = (d: Directive) => {
+    if (d.value_type === 'switch') return <span className={`badge ${d.value_json === true ? 'badge-ok' : 'badge-danger'}`}>{d.value_json === true ? '开启' : '关闭'}</span>;
+    if (d.value_type === 'json') return <span className="mono" style={{ fontSize: 12 }}>{JSON.stringify(d.value_json).slice(0, 50)}…</span>;
+    return <span className="mono">{String(d.value_json ?? '').slice(0, 50)}</span>;
+  };
+
+  return (
+    <div className="card">
+      {msg && <div className="notice notice-ok">{msg}</div>}
+      <div className="row-between">
+        <div className="row">
+          <select className="input" style={{ width: 140 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="all">全部指令</option><option value="active">生效中</option><option value="revoked">已撤销</option>
+          </select>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>下发指令</button>
+      </div>
+      <div className="table-wrap" style={{ marginTop: 12 }}>
+        <table className="tbl">
+          <thead><tr><th>指令键</th><th>类型</th><th>值</th><th>作用域</th><th>状态</th><th>创建</th><th>操作</th></tr></thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.directive_id}>
+                <td className="mono">{d.key}<div className="muted" style={{ fontSize: 12 }}>{d.note}</div></td>
+                <td><span className="badge badge-dim">{d.value_type}</span></td>
+                <td>{renderValue(d)}</td>
+                <td>{d.scope === 'global' ? '全局' : d.scope === 'group' ? '用户组' : '单用户'}</td>
+                <td>{d.is_active
+                  ? <span className="badge badge-ok">生效中</span>
+                  : <span className="badge badge-danger">已撤销{d.revoked_at ? ` ${fmtTime(d.revoked_at)}` : ''}</span>}
+                </td>
+                <td>{d.created_by_name}<div className="muted" style={{ fontSize: 12 }}>{fmtTime(d.created_at)}</div></td>
+                <td>{d.is_active && <button className="btn btn-danger btn-sm" onClick={() => revoke(d)}>撤销</button>}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={7} className="muted">暂无指令</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint">
+        撤销语义（下发即撤销即生效）：开关 → 客户端删除强制配置并恢复默认值；地址/文本/数字/JSON → 清空；
+        搜索引擎 → 恢复编译时默认搜索引擎（必应）。全部操作写审计日志。
+      </p>
+      {showCreate && <CreateDirective onClose={() => setShowCreate(false)} onDone={() => { setShowCreate(false); load(); }} />}
+    </div>
+  );
+}
+
+function CreateDirective({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { t } = useI18n();
+  const [groups, setGroups] = useState<Array<{ group_id: string; group_name: string }>>([]);
+  const [scope, setScope] = useState<'global' | 'group' | 'user'>('global');
+  const [valueType, setValueType] = useState<'switch' | 'text' | 'number' | 'json' | 'search_engine'>('switch');
+  const [key, setKey] = useState(DIRECTIVE_KEY_OPTIONS[0]);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    api<{ groups: Array<{ group_id: string; group_name: string }> }>('/api/admin/groups', { headers: bearerHeaders() })
+      .then((r) => r.code === 0 && setGroups(r.data?.groups ?? []));
+  }, []);
+
+  return (
+    <div className="modal-mask" onClick={onClose}>
+      <div className="card modal" onClick={(e) => e.stopPropagation()}>
+        <div className="card-title">下发策略指令</div>
+        {msg && <div className="notice notice-danger">{msg}</div>}
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          const vt = String(f.get('valueType'));
+          let value: unknown = f.get('value');
+          if (vt === 'switch') value = f.get('value') === 'true';
+          if (vt === 'number') value = Number(f.get('value'));
+          const r = await api('/api/admin/directives', {
+            method: 'POST', headers: bearerHeaders(),
+            json: {
+              action: 'create', scope: f.get('scope'), scopeId: (f.get('scopeId') as string) || null,
+              key: f.get('key'), valueType: vt, value, note: f.get('note'),
+              confirmHighRisk: true
+            }
+          });
+          if (r.code === 0) { onDone(); } else setMsg(r.message);
+        }}>
+          <div className="field"><label>指令键（policy key）</label>
+            <select className="input" name="key" value={key} onChange={(e) => setKey(e.target.value)}>
+              {DIRECTIVE_KEY_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-2">
+            <div className="field"><label>值类型（决定撤销语义）</label>
+              <select className="input" name="valueType" value={valueType} onChange={(e) => setValueType(e.target.value as typeof valueType)}>
+                <option value="switch">开关（撤销=恢复默认）</option>
+                <option value="text">地址/文本（撤销=清空）</option>
+                <option value="number">数字（撤销=清空）</option>
+                <option value="json">JSON（撤销=清空）</option>
+                <option value="search_engine">搜索引擎（撤销=回编译默认必应）</option>
+              </select>
+            </div>
+            <div className="field"><label>作用域</label>
+              <select className="input" name="scope" value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
+                <option value="global">全局</option><option value="group">用户组</option><option value="user">单用户</option>
+              </select>
+            </div>
+          </div>
+          {scope !== 'global' && (
+            <div className="field"><label>{scope === 'group' ? '目标用户组' : '目标用户组 ID / 用户 ID'}</label>
+              {scope === 'group'
+                ? <select className="input" name="scopeId">{groups.map((g) => <option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select>
+                : <input className="input mono" name="scopeId" placeholder="user_id (uuid)" />}
+            </div>
+          )}
+          <div className="field"><label>值</label>
+            {valueType === 'switch'
+              ? <select className="input" name="value"><option value="true">开启</option><option value="false">关闭</option></select>
+              : valueType === 'json'
+                ? <textarea className="input mono" name="value" rows={4} placeholder='{"address":"node.example.org","port":443}' />
+                : <input className="input" name="value" placeholder={valueType === 'search_engine' ? 'https://cn.bing.com/search?q={searchTerms}' : ''} />}
+          </div>
+          <div className="field"><label>备注</label><input className="input" name="note" /></div>
+          <div className="row-between">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>{t('cancel')}</button>
+            <button className="btn btn-primary">下发</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

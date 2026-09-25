@@ -64,6 +64,22 @@ inline constexpr std::string_view kCloudDropQuotaMB = "CustomCloudDropQuotaMB";
 // 扩展下发（原生 ForceInstall* 键 + 自定义）
 inline constexpr std::string_view kAllowUserSelfInstallExtension = "AllowUserSelfInstallExtension";
 inline constexpr std::string_view kAllowUserUninstallForcedExt = "AllowUserUninstallForcedExt";
+// 用户上传自己的扩展到同步空间（EXTENSION_BLOB，计入配额）
+inline constexpr std::string_view kAllowUserUploadOwnExtension = "AllowUserUploadOwnExtension";
+
+// 加速器 / 第三方代理协议（docs/accelerator.md 支持矩阵）
+//   原生：HTTP / HTTPS / SOCKS4 / SOCKS5（net/proxy_resolution）
+//   第三方：VMess / VLESS / Trojan / Shadowsocks（本地 Xray-core 方案 B）
+inline constexpr std::string_view kAcceleratorEnabled = "NodeByteAcceleratorEnabled";
+inline constexpr std::string_view kAcceleratorProtocols = "NodeByteAcceleratorProtocols";
+inline constexpr std::string_view kAllowCustomProxy = "NodeByteAllowCustomProxy";
+// 同步服务器地址（上游可强制覆盖；撤销指令后清空回用户本地配置）
+inline constexpr std::string_view kSyncServerOverride = "NodeByteSyncServerOverride";
+
+// 数据导入（CSV / 浏览器导入，docs/data-import.md）
+inline constexpr std::string_view kImportPasswordsAllowed = "NodeByteImportPasswordsAllowed";
+inline constexpr std::string_view kImportHistoryAllowed = "NodeByteImportHistoryAllowed";
+inline constexpr std::string_view kImportBookmarksAllowed = "NodeByteImportBookmarksAllowed";
 
 // 伪装（扩展商店访问 UA 伪装）
 inline constexpr std::string_view kSpoofBrowserVendor = "CustomSpoofBrowserVendor";
