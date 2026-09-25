@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { q } from '@/lib/db';
+import { q, q1 } from '@/lib/db';
 import { CODE, ok, err, readJson } from '@/lib/status';
 import { authUser } from '@/lib/auth';
 import { userSecurityLog, clientIp } from '@/lib/audit';
