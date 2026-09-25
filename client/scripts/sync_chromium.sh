@@ -70,16 +70,21 @@ if [ ! -f .gclient ]; then
 fi
 
 # TARGET_OS 注入（android 必须在首次 sync 前写入，SDK/NDK 才会随 hooks 下载）
+# 注意：fetch 生成的 .gclient 是 Python 语法（solutions = [...]），不能按 JSON 解析；
+#       这里以文本方式安全写入/替换顶层 target_os 赋值
 if [ -n "${TARGET_OS:-}" ]; then
   python3 - "$TARGET_OS" <<'PY'
-import json, pathlib, sys
+import pathlib, re, sys
 p = pathlib.Path(".gclient")
-cfg = json.loads(p.read_text())
+src = p.read_text()
 os_list = [sys.argv[1]]
-if cfg.get("target_os") != os_list:
-    cfg["target_os"] = os_list
-    p.write_text(json.dumps(cfg, indent=2) + "\n")
-    print(f"target_os -> {os_list}")
+line = "target_os = " + repr(os_list)
+if re.search(r'^\s*target_os\s*=', src, re.M):
+    src = re.sub(r'^\s*target_os\s*=.*$', line, src, flags=re.M)
+else:
+    src = src.rstrip() + "\n\n" + line + "\n"
+p.write_text(src)
+print(f"target_os -> {os_list}")
 PY
 fi
 
