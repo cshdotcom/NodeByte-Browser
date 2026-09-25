@@ -1,0 +1,105 @@
+// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
+//
+// NodeByte Mojo 接口定义（客户端提示词 附录F.1）。
+//
+// ⚠️ 改动 .mojom 会触发大范围重编译（提示词 10.5.4），尽量批量修改、减少频率。
+// 命名空间 nodebyte.mojom；WebUI 通过 Mojo.bindInterface 与 C++ 通信；
+// C++ 只暴露原子能力，业务逻辑全部 JS/WASM 侧（低侵入铁律 第十一章）。
+
+module nodebyte.mojom;
+
+// ---------------- NodeByteAccount：登录状态 / JWT 存取 / 2FA 状态 ----------------
+interface NodeByteAccount {
+  // 当前登录态与账号信息
+  GetLoginState() => (bool logged_in, string email, bool totp_enabled);
+  // 登录：对接 POST /api/auth/login（浏览器侧只做 UI，安全判断在后端）
+  Login(string identifier, string password, string totp_code)
+      => (int32 business_code, string jwt, string device_id, bool require_2fa_bind);
+  Logout();
+  // 2FA 状态（策略 CustomRequire2FA=true 时：未绑定则同步/DROP/协作全部锁定，仅 UI 提示）
+  Get2faPolicy() => (bool require_2fa, bool bound);
+};
+
+// ---------------- NodeByteSync：同步项开关 / 增量上传下载 / 快照导出 ----------------
+interface NodeByteSync {
+  // 设置页勾选的同步项（书签/密码/历史/扩展/Cookie会话/偏好），持久化到本地偏好
+  GetSyncTypes() => (array<string> types);
+  SetSyncTypes(array<string> types);
+
+  // 增量上传：客户端 AES-GCM 加密后的密文 blob（服务端只存密文，密钥永不上传）
+  UploadDelta(string data_type, int64 last_version, mojo_base.mojom.BigBuffer encrypted_blob)
+      => (int32 business_code, int64 new_version);
+  // 增量下载：GET /api/sync/{type}?since=<version>
+  DownloadDelta(string data_type, int64 since_version)
+      => (array<SyncItem> items);
+
+  // 手动快照备份：本地打包加密 → .custom-browser-backup（不经过服务端）
+  // 策略 CustomAllowExportBackup=false 时导出按钮隐藏/置灰
+  ExportLocalBackup() => (bool allowed, mojo_base.mojom.BigBuffer? encrypted_archive);
+};
+
+struct SyncItem {
+  int64 version;
+  mojo_base.mojom.BigBuffer encrypted_blob;
+  int64 created_at;
+};
+
+// ---------------- NodeByteDrop：侧边栏 / 文件 / 截图 / 标签页推送 / 会话分享 ----------------
+interface NodeByteDrop {
+  GetMessages(int32 limit) => (array<DropMessage> messages);
+
+  // 文件选择（系统文件选择器，多选）→ 分片上传 MinIO（经后端预签名 URL）
+  PickAndUploadFiles() => (int32 uploaded);
+  // 网页截图：WebContents::CaptureSnapshot（仅网页内容，跨平台）；
+  // Windows 桌面全屏走辅助 exe（本地 IPC）；Android 仅网页截图
+  CaptureTabScreenshot() => (bool ok);
+  CaptureDesktopScreenshot() => (bool ok, bool supported);
+
+  // 标签页推送：推送到同账号其他设备，或按邮箱批量发送
+  PushTab(string url, string title, array<string> target_emails, array<string> target_device_ids)
+      => (int32 business_code, array<string> invalid_emails);
+
+  // Cookie 登录上下文分享（高危）：发送前强制校验本机账号密码（后端强校验）
+  ShareSessionContext(string password, string display_name, string note_tag, string target_emails)
+      => (int32 business_code);
+  AcceptSharedSession(string shared_session_id);
+  RejectSharedSession(string shared_session_id);
+  // 使用外部会话：注入隔离存储分区（不覆盖本机默认 Cookie 库）
+  UseSharedSession(string shared_session_id);
+};
+
+struct DropMessage {
+  string msg_id;
+  string push_type;     // tab_page / session_context / collab_invite / text / notice
+  string payload_json;
+  bool revoked;
+  int64 created_at;
+};
+
+// ---------------- NodeBytePolicy：策略拉取回调 / 变更通知 / 敏感字段标记 ----------------
+interface NodeBytePolicy {
+  // 手动触发重新拉取 GET /api/client/policy（WebSocket policy_update 也触发）
+  RefreshPolicy();
+  // 当前敏感字段列表（WebUI 设置页据此隐藏明文，替换为「此配置由组织管理员管控」）
+  GetSensitiveFields() => (array<string> fields);
+  // 同步服务器地址输入框置灰状态（CustomLockSyncServer）
+  IsSyncServerLocked() => (bool locked);
+};
+
+// ---------------- NodeByteCollab：会话状态 / 媒体申请 / 输入注入 / 悬浮窗控制 ----------------
+interface NodeByteCollab {
+  CreateSession(int32 expire_hours, bool allow_multi, int32 max_participants)
+      => (string session_id, string share_token);
+  JoinByToken(string token) => (int32 business_code, string session_id);
+
+  // 协作者申请开麦/开摄像头：服务端不放行不得建立上传轨道（后端唯一权威）
+  RequestAudioPublish(string session_id);
+  RequestVideoPublish(string session_id);
+
+  // 发起方管控：允许/强制静音/关闭摄像头/收回控制权/踢出/全体操作
+  Moderate(string session_id, string action, string participant_id);
+
+  // Windows 悬浮管控面板（原生 HWND Popup，非网页 div）：仅 owner 渲染
+  ShowControlPanel(string session_id) => (bool supported);   // Android 返回 false（放 Drop 侧边栏）
+  HideControlPanel();
+};
