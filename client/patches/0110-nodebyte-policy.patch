@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc
-new file mode 100755
+new file mode 100644
 index 0000000..3c83015
 --- /dev/null
 +++ b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc
@@ -178,7 +178,7 @@ index 0000000..3c83015
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h
-new file mode 100755
+new file mode 100644
 index 0000000..0dbf907
 --- /dev/null
 +++ b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h
@@ -549,7 +549,7 @@ index 0000000..192e73f
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_DIRECTIVE_APPLIER_H_
 diff --git a/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h
-new file mode 100755
+new file mode 100644
 index 0000000..fd92fbd
 --- /dev/null
 +++ b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h

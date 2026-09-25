@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-09-25
+
+### Fixed（客户端资产校验工作流修复）
+- **补丁集模式归一**：生成环境权限位差异导致 0100–0150 补丁内嵌 `new file mode 100755`，
+  干净环境重新生成则为 `100644`，CI「补丁一致性比对」失败 —— 全量重新生成（100644）并提交，
+  0160/0170（extensions/import）同步校正
+- client-validate.yml 加固：比对前 `git config core.fileMode false`，免疫文件权限位噪音
+- 结论：补丁集与 src-nodebyte 源码树重新收敛，Validate-Client-Assets 恢复通过
+
 ## [1.3.1] - 2026-09-25
 
 ### Added

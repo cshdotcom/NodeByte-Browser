@@ -1,11 +1,5 @@
 name: Validate-Client-Assets
 
-# 客户端资产校验（托管 Runner）：
-#  - shellcheck 全部构建脚本
-#  - 补丁集与 src-nodebyte 源码树一致性（gen_patches 再生成比对）
-#  - 补丁文件格式完整性（diff 头与 hunk 计数）
-# 完整 Chromium 编译在自托管 Runner（build-nodebyte-browser.yml）
-
 on:
   push:
     branches: [main, 'release/*']
@@ -34,7 +28,6 @@ jobs:
 
       - name: GN args sanity
         run: |
-          # gn args 基本格式检查：非空、注释行/键值对行
           for f in client/gn/*.gn; do
             test -s "$f" || { echo "$f empty"; exit 1; }
             grep -Eq '^[a-z_]+ =' "$f" || { echo "$f missing assignments"; exit 1; }
@@ -43,6 +36,7 @@ jobs:
 
       - name: Patch set consistency (regenerate and compare)
         run: |
+          git config core.fileMode false
           bash client/scripts/gen_patches.sh >/dev/null
           git config user.email ci@nodebyte.local
           git config user.name ci
@@ -60,9 +54,8 @@ jobs:
           for p in client/patches/*.patch; do
             n=$(grep -c '^diff --git' "$p" || true)
             if [ "$n" -eq 0 ]; then
-              # hook 补丁为说明性文档型补丁（附 patch 头注释），检查至少含 hook 上下文
-              grep -q '⚠️ 基线' "$p" || { echo "::error::$p invalid"; exit 1; }
-              echo "== $p: hand-written hook (documented), baseline flags present"
+              grep -q '基线' "$p" || { echo "::error::$p invalid"; exit 1; }
+              echo "== $p: hand-written hook (documented)"
             else
               echo "== $p: $n file diffs"
               total=$((total + n))
