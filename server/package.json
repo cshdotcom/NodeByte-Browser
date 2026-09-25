@@ -1,0 +1,34 @@
+{
+  "name": "nodebyte-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NodeByte Browser Server - Next.js standalone backend (accounts, policy, sync, drop, collab, admin)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "bootstrap": "node scripts/bootstrap.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "minio": "^8.0.2",
+    "next": "14.2.13",
+    "pg": "^8.12.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
