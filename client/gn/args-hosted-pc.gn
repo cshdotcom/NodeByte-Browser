@@ -1,0 +1,24 @@
+# ---- out/Release-hosted-pc/args.gn —— GitHub 托管 Runner 直编（Linux x64）----
+# 托管 Runner：4 vCPU / 16GB 内存 / 单 job 6 小时上限。
+# 不开 is_official_build（ThinLTO/PGO 会显著拉长时间并放大内存峰值），
+# 全零符号 + 关组件编译，保证 6 小时内完成且产物可直接运行。
+
+is_debug = false
+is_component_build = false
+symbol_level = 0                     # 零符号：省磁盘、省时间（托管关键）
+blink_symbol_level = 0
+v8_symbol_level = 0
+use_thin_lto = false                 # 托管内存不足，禁用 LTO
+is_official_build = false
+dcheck_always_on = false
+
+enable_nacl = false
+enable_widevine = false
+proprietary_codecs = false
+ffmpeg_branding = "Chromium"
+
+# 剥离谷歌服务（ungoogled-chromium 社区常用做法，需核实参数名随版本变化）
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+disable_fieldtrial_config = true

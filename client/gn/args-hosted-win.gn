@@ -1,0 +1,26 @@
+# ---- out/Release-hosted-pc/args.gn —— GitHub 托管 Runner 直编（Windows x64）----
+# windows-2022 托管 Runner：4 vCPU / 16GB / 256GB 磁盘；VS2022 本地工具链
+# （DEPOT_TOOLS_WIN_TOOLCHAIN=0）。Windows 编译最重，参数必须最激进地省时间。
+
+is_debug = false
+is_component_build = false
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+use_thin_lto = false
+is_official_build = false
+dcheck_always_on = false
+
+enable_nacl = false
+enable_widevine = false
+proprietary_codecs = false
+ffmpeg_branding = "Chromium"
+
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+disable_fieldtrial_config = true
+
+# Windows 目标
+target_os = "win"
+target_cpu = "x64"

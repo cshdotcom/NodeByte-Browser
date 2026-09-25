@@ -117,6 +117,80 @@ index 0000000..df326ed
 +}
 +
 +}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/nodebyte_branding.h b/chrome/browser/nodebyte/nodebyte_branding.h
+new file mode 100644
+index 0000000..4b560c4
+--- /dev/null
++++ b/chrome/browser/nodebyte/nodebyte_branding.h
+@@ -0,0 +1,31 @@
++// Copyright 2025 The NodeByte Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++//
++// nodebyte_branding.h —— 产品显示名本地化（需求：编译后的软件自动识别当前安装
++// 设备语言，中文环境显示「NodeByte 浏览器」，其余显示「NodeByte Browser」）。
++//
++// 用法：UI 各处展示产品名时调用 nodebyte::GetLocalizedProductLabel()，
++// 替代硬编码字符串（低侵入：不改动 Chromium 现有 branding 体系，
++// 由调用点逐个切换，未切换处退化为英文品牌名，行为可预期）。
++
++#ifndef CHROME_BROWSER_NODEBYTE_NODEBYTE_BRANDING_H_
++#define CHROME_BROWSER_NODEBYTE_NODEBYTE_BRANDING_H_
++
++#include <string>
++
++namespace nodebyte {
++
++// 按当前应用 locale 返回本地化产品名（zh* → 中文，其余 → 英文）。
++std::string GetLocalizedProductLabel();
++
++// 指定 locale 的纯函数版本（便于单测与设置页预览）。
++// locale 形如 "zh-CN" / "zh-TW" / "en-US" / "ja"。
++std::string GetLocalizedProductLabelForLocale(const std::string& locale);
++
++// u16 便捷版（Views/界面字符串常用）。
++std::u16string GetLocalizedProductLabel16();
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_BRANDING_H_
+diff --git a/chrome/browser/nodebyte/nodebyte_branding.cc b/chrome/browser/nodebyte/nodebyte_branding.cc
+new file mode 100644
+index 0000000..e3bb366
+--- /dev/null
++++ b/chrome/browser/nodebyte/nodebyte_branding.cc
+@@ -0,0 +1,31 @@
++// Copyright 2025 The NodeByte Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/nodebyte/nodebyte_branding.h"
++
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace nodebyte {
++
++std::string GetLocalizedProductLabel() {
++  // l10n_util::GetApplicationLocale 返回当前 UI locale（如 zh-CN）。
++  return GetLocalizedProductLabelForLocale(
++      l10n_util::GetApplicationLocale(std::string()));
++}
++
++std::string GetLocalizedProductLabelForLocale(const std::string& locale) {
++  // zh / zh-CN / zh-TW / zh-HK / zh-Hans / zh-Hant 全部显示中文产品名。
++  if (base::StartsWith(locale, "zh", base::CompareCase::INSENSITIVE_ASCII)) {
++    return "NodeByte \xE6\xB5\x8F\xE8\xA7\x88\xE5\x99\xA8";  // NodeByte 浏览器
++  }
++  return "NodeByte Browser";
++}
++
++std::u16string GetLocalizedProductLabel16() {
++  return base::UTF8ToUTF16(GetLocalizedProductLabel());
++}
++
++}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/mojo/nodebyte.mojom b/chrome/browser/nodebyte/mojo/nodebyte.mojom
 new file mode 100644
 index 0000000..d1cd43e

@@ -7,9 +7,13 @@
 # 行为：
 #   1. 按序号顺序应用 patches/*.patch；
 #   2. 优先 git apply --3way（允许在基线轻微漂移时自动三方合并）；
-#   3. 任一补丁失败 → 立即退出并输出冲突文件（提示词：失败即退出并输出冲突文件）。
+#   3. 新增文件补丁（0100–0199）失败 → 立即退出并输出冲突文件；
+#   4. 核心 hook 补丁（0200+，标注基线需核实）在 PATCH_BEST_EFFORT=1 时
+#      失败仅告警并跳过（GitHub 托管 Runner 基线为最新 stable，允许漂移降级）。
 
 set -euo pipefail
+
+PATCH_BEST_EFFORT="${PATCH_BEST_EFFORT:-0}"
 
 CHROMIUM_SRC="${1:?usage: apply_patches.sh /path/to/chromium/src}"
 PATCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../patches" && pwd)"
@@ -41,6 +45,12 @@ for patch in "${PATCH_DIR}"/*.patch; do
     git apply --3way --check "${patch}" 2>&1 | head -20 >&2 || true
     echo "Conflicting files are listed above; resolve manually then re-run." >&2
     echo "-------------------------------------------" >&2
+    # hook 补丁（0200+）在 best-effort 模式下跳过（基线漂移允许功能降级）
+    if [ "${PATCH_BEST_EFFORT}" = "1" ] && [[ "${name}" =~ ^02[0-9][0-9]- ]]; then
+      echo "warn: [best-effort] skip ${name} (hook patch, baseline drift tolerated)" >&2
+      echo "SKIPPED:${name}" >> "${MARKER}"
+      continue
+    fi
     failed=1
     break
   fi

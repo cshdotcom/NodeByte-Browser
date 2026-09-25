@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-25
+
+### Added（云端直编 + 产品本地化）
+- **GitHub Actions 托管 Runner 云端直编**（`build-nodebyte-browser.yml` 全面重写，不再依赖自托管构建机）：
+  - 三平台并行任务：Linux x64（`ubuntu-22.04`）、Windows x64（`windows-2022`）、Android arm64（`ubuntu-22.04` + `target_os=android`）
+  - 编译流程：官方 depot_tools → `fetch --no-history chromium` **正式 stable 源码**（版本号动态取自 Google versionhistory API，失败回落保底版本）→ 应用 NodeByte 补丁集 → `autoninja` → 打包 standalone 成品
+  - 托管限制专项优化：`jlumbroso/free-disk-space` 释放约 50GB 磁盘、零符号（`symbol_level=0`）、禁用 ThinLTO/PGO、单 job 355 分钟上限、保留 swap 供链接阶段使用
+  - Windows 任务 `continue-on-error`：即使 Windows 编译超时，Linux/Android 产物照常发布
+  - **tag 推送自动把成品上传到对应 GitHub Release**（`publish-release` 任务）
+- `client/gn/args-hosted-{pc,win,android}.gn`：托管 Runner 专用 GN 参数（无官方优化，6 小时内可控）
+- `client/scripts/package_linux.sh`：Linux standalone 便携包（tar.zst/gz，含 nodebyte 启动器与版本说明）
+- 补丁应用 best-effort 模式：0100–0199 新增文件补丁强制应用；0200+ 核心 hook 补丁在托管基线（最新 stable）漂移时告警跳过、允许功能降级
+- `sync_chromium.sh` 重写：动态获取官方最新 stable 版本、`TARGET_OS` 注入（Android 首次同步即含 SDK/NDK）、托管无 root 时走 sudo 安装依赖
+- **产品名本地化**（`nodebyte_branding.{h,cc}`，并入补丁 0100）：软件自动识别安装设备语言——中文环境显示「NodeByte 浏览器」，其余显示「NodeByte Browser」；UI 展示点低侵入逐个切换
+
+### Changed
+- `build_pc.sh` / `build_android.sh` / `package_windows.sh` 支持 `ARGS_FILE` / `OUT_SUFFIX` / `DEPOT_TOOLS_DIR` 环境变量，托管与自托管共用一套脚本
+- 仓库更名：`chromium-build` → **`NodeByte-Browser`**
+
 ## [1.0.0] - 2026-09-25
 
 ### Added（工程化收官）
