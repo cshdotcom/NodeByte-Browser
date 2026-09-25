@@ -1,0 +1,14 @@
+{
+  "name": "nodebyte-ws-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NodeByte WebSocket signaling service (device online, status, commands, drop push, collab signaling)",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.12.0",
+    "ws": "^8.18.0"
+  }
+}
