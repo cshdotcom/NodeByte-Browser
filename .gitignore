@@ -1,0 +1,27 @@
+# --- root ---
+*.log
+*.tmp
+.DS_Store
+
+# --- server ---
+server/node_modules/
+server/.next/
+server/.env
+server/.env.local
+server/standalone/
+server/coverage/
+
+# --- ws-service ---
+server/ws-service/node_modules/
+
+# --- client build caches ---
+client/.cache/
+client/out/
+client/*.pyc
+client/tools/depot_tools/
+client/chromium/
+
+# --- editors ---
+.idea/
+.vscode/
+*.swp
