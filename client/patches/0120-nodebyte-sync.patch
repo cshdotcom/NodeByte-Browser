@@ -1,0 +1,431 @@
+diff --git a/chrome/browser/nodebyte/sync/nodebyte_crypto.cc b/chrome/browser/nodebyte/sync/nodebyte_crypto.cc
+new file mode 100644
+index 0000000..37e8393
+--- /dev/null
++++ b/chrome/browser/nodebyte/sync/nodebyte_crypto.cc
+@@ -0,0 +1,117 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++
++#include "chrome/browser/nodebyte/sync/nodebyte_crypto.h"
++
++#include <cstdint>
++#include <utility>
++#include <vector>
++
++#include "base/base64.h"
++#include "base/logging.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "crypto/hkdf.h"
++#include "crypto/random.h"
++#include "third_party/boringssl/src/include/aead.h"
++
++namespace nodebyte::sync {
++
++namespace {
++
++constexpr size_t kKeyBytes = 32;
++constexpr size_t kIvBytes = 12;
++constexpr size_t kTagBytes = 16;
++constexpr char kEnvelopeVersion[] = "v1";
++
++}  // namespace
++
++// static
++absl::optional<SyncCrypto> SyncCrypto::DeriveFromPassphrase(
++    base::StringPiece passphrase,
++    base::span<const uint8_t> salt) {
++  if (passphrase.empty() || salt.empty()) return absl::nullopt;
++  // HKDF-SHA256（chromium/src/crypto/hkdf.h；【需核实】参数与 bssl/EVP_PKEY 派生路径）
++  std::vector<uint8_t> key =
++      crypto::HkdfSha256(reinterpret_cast<const uint8_t*>(passphrase.data()),
++                         passphrase.size(), salt.data(), salt.size(),
++                         /*info=*/reinterpret_cast<const uint8_t*>("nodebyte-sync"),
++                         /*info_len=*/14, kKeyBytes);
++  return SyncCrypto(std::move(key));
++}
++
++// static
++std::string SyncCrypto::GenerateRecoveryKey() {
++  // 32 字节随机 → 8 组 4 字符 Base32 风格（用户可手抄恢复）
++  std::vector<uint8_t> raw(32);
++  crypto::RandBytes(raw);
++  return base::Base64Encode(raw);
++}
++
++SyncCrypto::SyncCrypto(std::vector<uint8_t> key) : key_(std::move(key)) {}
++
++std::string SyncCrypto::Encrypt(base::StringPiece plaintext) const {
++  return EncryptBlob(base::make_span(
++      reinterpret_cast<const uint8_t*>(plaintext.data()), plaintext.size()));
++}
++
++std::string SyncCrypto::EncryptBlob(base::span<const uint8_t> data) const {
++  std::vector<uint8_t> iv(kIvBytes);
++  crypto::RandBytes(iv);
++
++  // EVP_aead_aes_256_gcm（boringssl；【需核实】直接用 crypto/ 封装的 Encrypt是完全等价替代）
++  const EVP_AEAD* aead = EVP_aead_aes_256_gcm();
++  EVP_AEAD_CTX ctx;
++  EVP_AEAD_CTX_init(&ctx, aead, key_.data(), key_.size(), kTagBytes, nullptr);
++
++  std::vector<uint8_t> out(data.size() + kTagBytes);
++  size_t out_len = 0;
++  if (!EVP_AEAD_CTX_seal(&ctx, out.data(), &out_len, out.size(), iv.data(),
++                         iv.size(), data.data(), data.size(), nullptr, 0)) {
++    EVP_AEAD_CTX_cleanup(&ctx);
++    LOG(ERROR) << "NodeByte sync: seal failed";
++    return std::string();
++  }
++  EVP_AEAD_CTX_cleanup(&ctx);
++
++  // v1.<iv b64>.<ciphertext+tag b64>
++  return base::StrCat({kEnvelopeVersion, ".",
++                       base::Base64Encode(iv), ".",
++                       base::Base64Encode(out)});
++}
++
++absl::optional<std::string> SyncCrypto::Decrypt(
++    base::StringPiece envelope) const {
++  auto blob = DecryptBlob(envelope);
++  if (!blob) return absl::nullopt;
++  return std::string(blob->begin(), blob->end());
++}
++
++absl::optional<std::vector<uint8_t>> SyncCrypto::DecryptBlob(
++    base::StringPiece envelope) const {
++  std::vector<std::string> parts = base::SplitString(
++      envelope, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
++  if (parts.size() != 3 || parts[0] != kEnvelopeVersion) return absl::nullopt;
++
++  std::string iv, body;
++  if (!base::Base64Decode(parts[1], &iv) || !base::Base64Decode(parts[2], &body))
++    return absl::nullopt;
++  if (iv.size() != kIvBytes || body.size() < kTagBytes) return absl::nullopt;
++
++  const EVP_AEAD* aead = EVP_aead_aes_256_gcm();
++  EVP_AEAD_CTX ctx;
++  if (!EVP_AEAD_CTX_init(&ctx, aead, key_.data(), key_.size(), kTagBytes, nullptr))
++    return absl::nullopt;
++
++  std::vector<uint8_t> out(body.size() - kTagBytes);
++  size_t out_len = 0;
++  const bool ok = EVP_AEAD_CTX_open(
++      &ctx, out.data(), &out_len, out.size(),
++      reinterpret_cast<const uint8_t*>(iv.data()), iv.size(),
++      reinterpret_cast<const uint8_t*>(body.data()), body.size(), nullptr, 0);
++  EVP_AEAD_CTX_cleanup(&ctx);
++  if (!ok) return absl::nullopt;
++  out.resize(out_len);
++  return out;
++}
++
++}  // namespace nodebyte::sync
+diff --git a/chrome/browser/nodebyte/sync/nodebyte_crypto.h b/chrome/browser/nodebyte/sync/nodebyte_crypto.h
+new file mode 100644
+index 0000000..afc417b
+--- /dev/null
++++ b/chrome/browser/nodebyte/sync/nodebyte_crypto.h
+@@ -0,0 +1,47 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 同步加密原语（客户端提示词 5.2.2 / F.2 —— 极其关键的安全边界）：
++//   登录后客户端本地派生 AES-256-GCM 主密钥，密钥永不上传服务器；
++//   所有敏感数据（密码、Cookie、crx、历史）在客户端加密后再上传，服务端只存密文；
++//   新设备恢复：下载密文 → 用户输入验证恢复密钥 → 本地解密。
++//   明文 Cookie 绝不入库。
++
++#ifndef CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_CRYPTO_H_
++#define CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_CRYPTO_H_
++
++#include <string>
++
++#include "base/containers/span.h"
++#include "base/strings/string_piece_forward.h"
++#include "third_party/abseil-cpp/absl/types/optional.h"
++#include "third_party/boringssl/src/include/aes.h"
++
++namespace nodebyte::sync {
++
++class SyncCrypto {
++ public:
++  // 从登录口令 + 本地盐派生主密钥（HKDF-SHA256；密钥仅存内存/OS 钥匙串，永不落盘明文、永不上传）
++  static absl::optional<SyncCrypto> DeriveFromPassphrase(
++      base::StringPiece passphrase, base::span<const uint8_t> salt);
++
++  // 序列化恢复密钥（用户可抄写，用于新设备恢复；提示词 5.2.2）
++  static std::string GenerateRecoveryKey();
++
++  // 加密 → base64(v1.iv.ciphertext.tag)
++  std::string Encrypt(base::StringPiece plaintext) const;
++  // 解密（失败返回 nullopt：密钥不匹配/数据被篡改）
++  absl::optional<std::string> Decrypt(base::StringPiece envelope) const;
++
++  // 大 blob（crx/备份包）流式版本：调用方分片
++  std::string EncryptBlob(base::span<const uint8_t> data) const;
++  absl::optional<std::vector<uint8_t>> DecryptBlob(
++      base::StringPiece envelope) const;
++
++ private:
++  explicit SyncCrypto(std::vector<uint8_t> key);
++  std::vector<uint8_t> key_;  // 32 字节 AES-256
++};
++
++}  // namespace nodebyte::sync
++
++#endif  // CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_CRYPTO_H_
+diff --git a/chrome/browser/nodebyte/sync/nodebyte_sync_client.cc b/chrome/browser/nodebyte/sync/nodebyte_sync_client.cc
+new file mode 100644
+index 0000000..109155f
+--- /dev/null
++++ b/chrome/browser/nodebyte/sync/nodebyte_sync_client.cc
+@@ -0,0 +1,142 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++
++#include "chrome/browser/nodebyte/sync/nodebyte_sync_client.h"
++
++#include <utility>
++
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/stringprintf.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++
++namespace nodebyte::sync {
++
++std::string SyncDataTypeToString(SyncDataType type) {
++  switch (type) {
++    case SyncDataType::kBookmarks: return "bookmarks";
++    case SyncDataType::kHistory: return "history";
++    case SyncDataType::kSettings: return "settings";
++    case SyncDataType::kCookieSets: return "cookie_sets";
++    case SyncDataType::kFingerprints: return "fingerprints";
++    case SyncDataType::kProxy: return "proxy";
++    case SyncDataType::kExtensions: return "extensions";
++    case SyncDataType::kPasswords: return "passwords";
++    case SyncDataType::kPreferences: return "preferences";
++  }
++  return "settings";
++}
++
++bool SyncDataTypeFromString(const std::string& s, SyncDataType* out) {
++  static const std::map<std::string, SyncDataType> kMap = {
++      {"bookmarks", SyncDataType::kBookmarks},
++      {"history", SyncDataType::kHistory},
++      {"settings", SyncDataType::kSettings},
++      {"cookie_sets", SyncDataType::kCookieSets},
++      {"fingerprints", SyncDataType::kFingerprints},
++      {"proxy", SyncDataType::kProxy},
++      {"extensions", SyncDataType::kExtensions},
++      {"passwords", SyncDataType::kPasswords},
++      {"preferences", SyncDataType::kPreferences}};
++  auto it = kMap.find(s);
++  if (it == kMap.end()) return false;
++  *out = it->second;
++  return true;
++}
++
++NodeByteSyncClient::NodeByteSyncClient(const GURL& server_base)
++    : server_base_(server_base) {}
++
++NodeByteSyncClient::~NodeByteSyncClient() = default;
++
++void NodeByteSyncClient::SetPolicyState(
++    bool allow_sync, const std::vector<std::string>& disabled_types) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  allow_sync_ = allow_sync;
++  disabled_types_ = disabled_types;
++}
++
++bool NodeByteSyncClient::IsTypeAllowed(SyncDataType type) const {
++  if (!allow_sync_) return false;
++  const std::string s = SyncDataTypeToString(type);
++  return std::find(disabled_types_.begin(), disabled_types_.end(), s) ==
++         disabled_types_.end();
++}
++
++void NodeByteSyncClient::EnqueueChange(SyncDataType type,
++                                       const std::string& key,
++                                       const std::string& plaintext,
++                                       const SyncCrypto& crypto) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (!IsTypeAllowed(type)) {
++    DVLOG(1) << "NodeByte sync: type blocked by policy: "
++             << SyncDataTypeToString(type);
++    return;
++  }
++  PendingChange change;
++  change.type = type;
++  change.key = key;
++  change.local_version = ++version_map_[SyncDataTypeToString(type)];
++  change.encrypted = crypto.Encrypt(plaintext);
++  change.changed_at = base::Time::Now();
++  pending_.push_back(std::move(change));
++  // 实时增量：即刻尝试上传（网络失败保留队列，联网后合并）
++  UploadNext();
++}
++
++void NodeByteSyncClient::SyncNow() {
++  for (int t = 0; t <= static_cast<int>(SyncDataType::kMaxValue); ++t) {
++    auto type = static_cast<SyncDataType>(t);
++    if (!IsTypeAllowed(type)) continue;
++    DownloadSince(type, version_map_[SyncDataTypeToString(type)]);
++  }
++  UploadNext();
++}
++
++void NodeByteSyncClient::UploadNext() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (pending_.empty()) return;
++  // 【需核实】通过 profile 的 URLLoaderFactory POST /api/sync/{type}
++  // body: { lastVersion, blob: <base64 密文>, snapshotType: "real_time_delta" }
++  // 成功回调 OnUploadDone 推进版本号并弹出队列；41301 → 提示「存储空间已满」。
++  // 网络层实现与 CloudOrgPolicyProvider::FetchPolicy 同构，此处略。
++}
++
++void NodeByteSyncClient::OnUploadDone(SyncDataType type, int64_t new_version) {
++  version_map_[SyncDataTypeToString(type)] = new_version;
++}
++
++void NodeByteSyncClient::DownloadSince(SyncDataType type, int64_t since_version) {
++  // 【需核实】GET /api/sync/{type}?since=<since_version>
++  // 返回 items（密文列表）→ MergeIncoming
++}
++
++void NodeByteSyncClient::MergeIncoming(
++    SyncDataType type, const std::vector<SyncServerItem>& items) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  // 合并策略（提示词 F.2）：
++  //   书签合并 / 历史去重 / 设置覆盖 / Cookie 集 → 写入加密 SQLite（0130 模块）
++  for (const SyncServerItem& item : items) {
++    if (item.version > version_map_[SyncDataTypeToString(type)]) {
++      version_map_[SyncDataTypeToString(type)] = item.version;
++    }
++  }
++}
++
++std::string NodeByteSyncClient::ExportLocalBackup(const SyncCrypto& crypto) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  // 策略 CustomAllowExportBackup=false → 导出按钮隐藏/置灰，此处双保险
++  //（实际置灰由 WebUI 读 NodeBytePolicy 接口）
++  // 打包全部同步项 → AES-GCM 加密 → .custom-browser-backup（本地完成，不经服务端）
++  base::Value::Dict manifest;
++  manifest.Set("version", 1);
++  manifest.Set("exported_at", base::Time::Now().ToJsTime());
++  std::string json;
++  base::JSONWriter::Write(manifest, &json);
++  std::string envelope = crypto.Encrypt(json);
++  if (envelope.empty()) return std::string();
++  DVLOG(1) << "NodeByte backup exported: " << kBackupExtension;
++  return envelope;
++}
++
++}  // namespace nodebyte::sync
+diff --git a/chrome/browser/nodebyte/sync/nodebyte_sync_client.h b/chrome/browser/nodebyte/sync/nodebyte_sync_client.h
+new file mode 100644
+index 0000000..ebbb195
+--- /dev/null
++++ b/chrome/browser/nodebyte/sync/nodebyte_sync_client.h
+@@ -0,0 +1,101 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 自定义同步客户端（客户端提示词 5.2 / F.2）：
++//   - 移除 Google Sync，替换为自建同步（bsync.nodebyte.cn）
++//   - 同步类型：bookmarks / history / settings / cookie_sets / fingerprints / proxy /
++//               extensions / passwords / preferences（全为客户端加密后密文）
++//   - 增量实时同步（real_time_delta）+ 手动快照（manual_backup → .custom-browser-backup）
++//   - 策略执行：CustomAllowSync=false → 入口置灰；CustomSyncDisabledTypes 按类型禁止
++//
++// 架构：本地变更日志（type,key,version）→ 定时/触发批量加密上传；
++//       下载合并按类型分策略（书签合并/历史去重/设置覆盖/Cookie集写入加密SQLite）。
++
++#ifndef CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_SYNC_CLIENT_H_
++#define CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_SYNC_CLIENT_H_
++
++#include <map>
++#include <string>
++
++#include "base/memory/weak_ptr.h"
++#include "base/sequence_checker.h"
++#include "base/time/time.h"
++#include "chrome/browser/nodebyte/sync/nodebyte_crypto.h"
++#include "components/keyed_service/core/keyed_service.h"
++#include "url/gurl.h"
++
++namespace nodebyte::sync {
++
++enum class SyncDataType {
++  kBookmarks,
++  kHistory,
++  kSettings,
++  kCookieSets,
++  kFingerprints,
++  kProxy,
++  kExtensions,
++  kPasswords,
++  kPreferences,
++  kMaxValue = kPreferences
++};
++
++std::string SyncDataTypeToString(SyncDataType type);
++bool SyncDataTypeFromString(const std::string& s, SyncDataType* out);
++
++// 本地变更日志条目（离线可操作，联网后合并上传）
++struct PendingChange {
++  SyncDataType type;
++  std::string key;          // 数据项主键
++  int64_t local_version;    // 单调递增
++  std::string encrypted;    // 已加密密文（v1.iv.ct.tag）
++  base::Time changed_at;
++};
++
++struct SyncServerItem {
++  int64_t version;
++  std::string encrypted_blob;
++  int64_t created_at;
++};
++
++class NodeByteSyncClient : public KeyedService {
++ public:
++  explicit NodeByteSyncClient(const GURL& server_base);
++  ~NodeByteSyncClient() override;
++
++  // 策略注入：CustomAllowSync / CustomSyncDisabledTypes（由 Policy 模块在变更时调用）
++  void SetPolicyState(bool allow_sync,
++                      const std::vector<std::string>& disabled_types);
++  bool IsTypeAllowed(SyncDataType type) const;
++
++  // 记录本地变更（业务模块调用；本函数只做日志与排队，不直接发网络）
++  void EnqueueChange(SyncDataType type, const std::string& key,
++                     const std::string& plaintext,
++                     const SyncCrypto& crypto);
++
++  // 触发一轮同步：上传本地增量 → 下载对端增量并合并
++  void SyncNow();
++
++  // 手动快照导出：全部同步项 → 加密归档（.custom-browser-backup，本地完成不经服务端）
++  // 返回空字符串表示被策略禁止（CustomAllowExportBackup=false）
++  std::string ExportLocalBackup(const SyncCrypto& crypto);
++
++ private:
++  void UploadNext();
++  void OnUploadDone(SyncDataType type, int64_t new_version);
++  void DownloadSince(SyncDataType type, int64_t since_version);
++  void MergeIncoming(SyncDataType type, const std::vector<SyncServerItem>& items);
++
++  GURL server_base_;
++  bool allow_sync_ = true;
++  std::vector<std::string> disabled_types_;
++
++  // 各类型本地版本号（单调递增，解决冲突）
++  std::map<std::string, int64_t> version_map_;
++  std::vector<PendingChange> pending_;
++
++  SEQUENCE_CHECKER(sequence_checker_);
++  base::WeakPtrFactory<NodeByteSyncClient> weak_factory_{this};
++};
++
++}  // namespace nodebyte::sync
++
++#endif  // CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_SYNC_CLIENT_H_

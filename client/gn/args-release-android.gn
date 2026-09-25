@@ -1,0 +1,25 @@
+# ---- out/Release-android/args.gn —— Android 发布版（提示词 附录B，需核实）----
+is_debug = false
+is_component_build = false
+symbol_level = 0
+use_thin_lto = false                # Android LTO 更吃资源；发布视构建机内存再开
+is_official_build = true
+
+enable_nacl = false
+enable_widevine = false
+proprietary_codecs = false
+ffmpeg_branding = "Chromium"
+
+# 剥离谷歌服务
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+disable_fieldtrial_config = true
+
+# Android 目标
+target_os = "android"
+target_cpu = "arm64"
+android_ndk_root = "/opt/android-ndk"   # gclient 自带 NDK 优先，此处为外部路径提示
+
+# 应用包名（branding patch 0100 同时改 Java 包资源；需核实 build/config/android 内部规则）
+# chrome_public_manifest_package = "cn.nodebyte.browser"

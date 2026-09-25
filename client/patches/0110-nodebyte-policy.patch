@@ -1,0 +1,350 @@
+diff --git a/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc
+new file mode 100644
+index 0000000..3c83015
+--- /dev/null
++++ b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.cc
+@@ -0,0 +1,173 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++
++#include "chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h"
++
++#include <utility>
++
++#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/values.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++#include "components/policy/core/common/policy_bundle.h"
++#include "components/policy/core/common/policy_map.h"
++#include "components/policy/core/common/policy_types.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/storage_partition.h"
++#include "net/base/load_flags.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/url_loader_factory.mojom.h"
++
++namespace nodebyte {
++
++namespace {
++
++constexpr net::NetworkTrafficAnnotationTag kPolicyTrafficAnnotation =
++    net::DefineNetworkTrafficAnnotation("nodebyte_cloud_policy", R"(
++      semantics {
++        sender: "NodeByte Browser"
++        description: "Fetches organization policy from the NodeByte sync server."
++        trigger: "Browser startup, periodic refresh, or policy_update signal."
++        data: "Device id and bearer JWT. No user browsing data."
++        destination: OTHER
++        destination_other: "The organization-provided NodeByte sync server."
++      }
++      policy {
++        cookies_allowed: NO
++        setting: "Controlled by NodeByte organization policy."
++      })");
++
++constexpr int kMaxPolicyResponseBytes = 4 * 1024 * 1024;  // 4 MiB
++
++bool MergeLevel(const base::Value::Dict& root,
++                const char* key,
++                policy::PolicyMap& out) {
++  const base::Value::Dict* level = root.FindDict(key);
++  if (!level) return true;
++  for (const auto [name, value] : *level) {
++    out.Set(name, policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
++            policy::POLICY_SOURCE_CLOUD, value.Clone(), nullptr);
++    // 注：recommended 级别在调用侧以 POLICY_LEVEL_RECOMMENDED 设置。
++  }
++  return true;
++}
++
++}  // namespace
++
++bool CloudPolicyPayload::Parse(const base::Value::Dict& json) {
++  const std::string* version = json.FindString("policyVersion");
++  policy_version = version ? *version : std::string();
++
++  const base::Value::Dict* m = json.FindDict("mandatory");
++  const base::Value::Dict* r = json.FindDict("recommended");
++  mandatory = m ? m->Clone() : base::Value::Dict();
++  recommended = r ? r->Clone() : base::Value::Dict();
++
++  sensitive_fields.clear();
++  if (const base::Value::List* fields = json.FindList("sensitiveFields")) {
++    for (const base::Value& v : *fields) {
++      if (v.is_string()) sensitive_fields.push_back(v.GetString());
++    }
++  }
++  return true;
++}
++
++CloudOrgPolicyProvider::CloudOrgPolicyProvider(
++    policy::PolicyBundle&& initial_bundle,
++    policy::PolicyDomain domain,
++    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
++    : policy::ConfigurationPolicyProvider(
++          /*metadata=*/{domain,
++                        policy::POLICY_SCOPE_MACHINE,
++                        policy::POLICY_SOURCE_CLOUD}),
++      url_loader_factory_(std::move(url_loader_factory)) {
++  // 初始 bundle 由挂接点预填（见 hook 0200），此处持有。
++  bundle_ = std::move(initial_bundle);
++}
++
++CloudOrgPolicyProvider::~CloudOrgPolicyProvider() = default;
++
++void CloudOrgPolicyProvider::Init(policy::SchemaRegistry* registry) {
++  policy::ConfigurationPolicyProvider::Init(registry);
++  RefreshPolicies(base::OnceClosure());
++}
++
++void CloudOrgPolicyProvider::RefreshPolicies(base::OnceClosure refresh_callback) {
++  FetchPolicy(std::move(refresh_callback));
++}
++
++void CloudOrgPolicyProvider::Shutdown() {
++  url_loader_factory_ = nullptr;
++  policy::ConfigurationPolicyProvider::Shutdown();
++}
++
++std::vector<std::string> CloudOrgPolicyProvider::sensitive_fields() const {
++  return payload_.sensitive_fields;
++}
++
++void CloudOrgPolicyProvider::FetchPolicy(base::OnceClosure refresh_callback) {
++  if (!url_loader_factory_) {
++    if (refresh_callback) std::move(refresh_callback).Run();
++    return;
++  }
++
++  auto request = std::make_unique<network::ResourceRequest>();
++  // 同步服务器地址来自本地偏好（策略 CustomLockSyncServer=true 时锁定不可改）。
++  request->url = GURL("https://" + std::string(kDefaultSyncServer) + "/api/client/policy");
++  request->load_flags = net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
++  request->headers.SetHeader("Authorization", "Bearer " + pending_jwt_);
++  // deviceId 由 Account 模块持久化生成。
++  request->url = request->url.Resolve("?deviceId=" + pending_device_id_);
++
++  auto loader = network::SimpleURLLoader::Create(std::move(request),
++                                                 kPolicyTrafficAnnotation);
++  loader->DownloadToString(
++      url_loader_factory_.get(),
++      base::BindOnce(&CloudOrgPolicyProvider::OnFetched,
++                     weak_factory_.GetWeakPtr(), std::move(refresh_callback)),
++      kMaxPolicyResponseBytes);
++  loader_ = std::move(loader);
++}
++
++void CloudOrgPolicyProvider::OnFetched(base::OnceClosure refresh_callback,
++                                       std::unique_ptr<std::string> body) {
++  if (body) {
++    auto parsed = base::JSONReader::ReadAndReturnValueWithError(*body);
++    if (parsed.has_value() && parsed->is_dict()) {
++      // 统一信封 { code, message, data }；业务码 40301 → 触发 2FA 绑定引导
++      const base::Value::Dict& envelope = parsed->GetDict();
++      if (const base::Value::Dict* data = envelope.FindDict("data")) {
++        payload_.Parse(*data);
++        ApplyPayload();
++      }
++    } else {
++      LOG(WARNING) << "NodeByte policy fetch: invalid JSON";
++    }
++  }
++  if (refresh_callback) std::move(refresh_callback).Run();
++}
++
++void CloudOrgPolicyProvider::ApplyPayload() {
++  policy::PolicyBundle bundle;
++  policy::PolicyMap& map =
++      bundle.Get(PolicyNamespace(domain(), std::string()));
++  policy::PolicyMap recommended_map;
++  // mandatory
++  for (const auto [name, value] : payload_.mandatory) {
++    map.Set(name, policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
++            policy::POLICY_SOURCE_CLOUD, value.Clone(), nullptr);
++  }
++  // recommended（用户可改，设置页不置灰）
++  for (const auto [name, value] : payload_.recommended) {
++    recommended_map.Set(name, policy::POLICY_LEVEL_RECOMMENDED,
++                        policy::POLICY_SCOPE_MACHINE,
++                        policy::POLICY_SOURCE_CLOUD, value.Clone(), nullptr);
++  }
++  map.MergeFrom(recommended_map);
++  bundle_ = std::move(bundle);
++  NotifyPolicyUpdate();
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h
+new file mode 100644
+index 0000000..0dbf907
+--- /dev/null
++++ b/chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h
+@@ -0,0 +1,71 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// CloudOrgPolicyProvider（客户端提示词 5.3.1 / 附录F）：
++//   从后端 GET /api/client/policy 拉取 JSON 策略，注入原生 PolicyService，优先级最高。
++//   复用 Chromium 原生企业策略框架：mandatory 下发后设置页原生置灰（内置行为），
++//   recommended 提供默认值，sensitiveFields 交由 WebUI 层隐藏明文。
++//
++// 架构说明：继承 policy::PolicyLoader / 或作为 policy::ConfigurationPolicyProvider
++// 的自定义实现（【基线：Chromium 128，需核实】Provider 接口签名）。
++// 挂接到 ProfilePolicyConnector 的优先级序列在 hook 补丁 0200 中注册。
++
++#ifndef CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_CLOUD_POLICY_PROVIDER_H_
++#define CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_CLOUD_POLICY_PROVIDER_H_
++
++#include <memory>
++#include <string>
++
++#include "base/functional/callback_forward.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/values.h"
++#include "components/policy/core/common/configuration_policy_provider.h"
++#include "components/policy/policy_export.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++
++class GURL;
++
++namespace network {
++class SharedURLLoaderFactory;
++}  // namespace network
++
++namespace nodebyte {
++
++// 策略载荷（对应服务端 /api/client/policy 响应 data）
++struct CloudPolicyPayload {
++  std::string policy_version;
++  base::Value::Dict mandatory;      // 注入 POLICY_LEVEL_MANDATORY
++  base::Value::Dict recommended;    // 注入 POLICY_LEVEL_RECOMMENDED
++  std::vector<std::string> sensitive_fields;  // WebUI 据此隐藏明文（UI 层）
++  bool Parse(const base::Value::Dict& json);
++};
++
++class CloudOrgPolicyProvider : public policy::ConfigurationPolicyProvider {
++ public:
++  CloudOrgPolicyProvider(
++      policy::PolicyBundle&& initial_bundle,
++      policy::PolicyDomain domain,
++      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
++  ~CloudOrgPolicyProvider() override;
++
++  // policy::ConfigurationPolicyProvider:
++  void Init(policy::SchemaRegistry* registry) override;
++  void RefreshPolicies(base::OnceClosure refresh_callback) override;
++  void Shutdown() override;
++
++  // WebUI 查询敏感字段（nodebyte://settings 用）
++  std::vector<std::string> sensitive_fields() const;
++
++ private:
++  // 请求 GET {sync_server}/api/client/policy?deviceId=xxx（JWT 由 Account 模块注入）
++  void FetchPolicy(base::OnceClosure refresh_callback);
++  void OnFetched(base::OnceClosure refresh_callback,
++                 std::unique_ptr<std::string> body);
++
++  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
++  CloudPolicyPayload payload_;
++  base::WeakPtrFactory<CloudOrgPolicyProvider> weak_factory_{this};
++};
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_CLOUD_POLICY_PROVIDER_H_
+diff --git a/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h
+new file mode 100644
+index 0000000..d311c7d
+--- /dev/null
++++ b/chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h
+@@ -0,0 +1,88 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 自定义策略键全量定义（客户端提示词 附录A：客户端职责是解析并执行）。
++// 注册位置见 hook 补丁 0200（components/policy/core/common/policy_registry.cc，需核实）。
++//
++// 执行点对照（提示词 附录A.3）：
++//   CustomDisableRendererSandbox     → browser_process_impl.cc 启动参数（hook 0210）
++//   CustomAllowJavaScript            → blink settings.cc（hook 0220）
++//   CustomAllowWebSockets / 列表     → websocket_manager.cc（hook 0220）
++//   CustomAllowWsUnderHttps / 列表   → mixed_content_checker.cc + websocket_manager.cc 双层
++//   CustomDisableSameOriginPolicy 等 → cors.cc / local_dom_window.cc（hook 0220）
++//   CustomAllowReadForeignCookieOrigins → cookie_access_delegate.cc（0130 会话集一并处理）
++//   ProxyMode/ProxyServer/...        → net/proxy_resolution（原生企业策略键，直接复用）
++//   SiteBlocklist/SiteAllowlist      → 原生 URLBlocklist 政策 + 网络层拦截
++//   其余 Custom*                     → CloudOrgPolicyProvider 注入后由各业务模块读取
++
++#ifndef CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_NODEBYTE_POLICY_KEYS_H_
++#define CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_NODEBYTE_POLICY_KEYS_H_
++
++#include <string_view>
++
++namespace nodebyte::policy_keys {
++
++// 账号安全
++inline constexpr std::string_view kRequire2fa = "CustomRequire2FA";
++inline constexpr std::string_view kLockSyncServer = "CustomLockSyncServer";
++inline constexpr std::string_view kAllowMultiProfile = "CustomAllowMultiProfile";
++inline constexpr std::string_view kAllowGuestMode = "CustomAllowGuestMode";
++inline constexpr std::string_view kAllowIncognito = "CustomAllowIncognito";
++
++// 同步控制
++inline constexpr std::string_view kAllowSync = "CustomAllowSync";
++inline constexpr std::string_view kAllowExportBackup = "CustomAllowExportBackup";
++inline constexpr std::string_view kSyncDisabledTypes = "CustomSyncDisabledTypes";
++
++// 沙箱与网页能力
++inline constexpr std::string_view kDisableRendererSandbox = "CustomDisableRendererSandbox";
++inline constexpr std::string_view kAllowJavaScript = "CustomAllowJavaScript";
++inline constexpr std::string_view kAllowWebSockets = "CustomAllowWebSockets";
++inline constexpr std::string_view kWebsocketAllowList = "CustomWebsocketAllowList";
++inline constexpr std::string_view kWebsocketBlockedHosts = "CustomWebsocketBlockedHosts";
++inline constexpr std::string_view kAllowWsUnderHttps = "CustomAllowWsUnderHttps";
++inline constexpr std::string_view kWebSocketAllowedHosts = "CustomWebSocketAllowedHosts";
++inline constexpr std::string_view kWebSocketBlockedHosts = "CustomWebSocketBlockedHosts";
++
++// 同源 / CORS
++inline constexpr std::string_view kDisableSameOriginPolicy = "CustomDisableSameOriginPolicy";
++inline constexpr std::string_view kCrossOriginAllowList = "CustomCrossOriginAllowList";
++inline constexpr std::string_view kAllowReadForeignCookieOrigins = "CustomAllowReadForeignCookieOrigins";
++
++// 代理 / VLESS（ProxyMode / ProxyServer / ProxyBypassList 为原生键）
++inline constexpr std::string_view kProxyVlessConfig = "CustomProxyVlessConfig";
++
++// 网站黑白名单（SiteBlocklist / SiteAllowlist 原生；SiteListMode 自定义）
++inline constexpr std::string_view kSiteListMode = "SiteListMode";
++
++// 配额
++inline constexpr std::string_view kLocalStorageQuotaMB = "CustomLocalStorageQuotaMB";
++inline constexpr std::string_view kCloudDropQuotaMB = "CustomCloudDropQuotaMB";
++
++// 搜索引擎（原生键）
++// DefaultSearchProviderEnabled / DefaultSearchProviderSearchURL
++
++// 扩展下发（原生 ForceInstall* 键 + 自定义）
++inline constexpr std::string_view kAllowUserSelfInstallExtension = "AllowUserSelfInstallExtension";
++inline constexpr std::string_view kAllowUserUninstallForcedExt = "AllowUserUninstallForcedExt";
++
++// 伪装（扩展商店访问 UA 伪装）
++inline constexpr std::string_view kSpoofBrowserVendor = "CustomSpoofBrowserVendor";
++inline constexpr std::string_view kSpoofUserAgent = "CustomSpoofUserAgent";
++
++// Drop / 协作
++inline constexpr std::string_view kAllowDropCollaboration = "AllowDropCollaboration";
++
++// 用户组功能黑白名单（feature_policy 键；组配置合并进 Policy JSON 下发）
++inline constexpr std::string_view kFeatDropFileScreenshot = "allow_drop_file_screenshot";
++inline constexpr std::string_view kFeatSync = "allow_sync";
++inline constexpr std::string_view kFeatExportBackup = "allow_export_backup";
++inline constexpr std::string_view kFeatCollabInvite = "allow_collab_invite";
++inline constexpr std::string_view kFeatJoplinIntegration = "allow_joplin_integration";
++inline constexpr std::string_view kFeatVlessProxy = "allow_vless_proxy";
++inline constexpr std::string_view kFeatDisableSandbox = "allow_disable_sandbox";
++inline constexpr std::string_view kFeatShareSessionContext = "allow_share_session_context";
++inline constexpr std::string_view kFeatForwardSharedSession = "allow_forward_shared_session";
++
++}  // namespace nodebyte::policy_keys
++
++#endif  // CHROME_BROWSER_NODEBYTE_POLICY_EXTEND_NODEBYTE_POLICY_KEYS_H_

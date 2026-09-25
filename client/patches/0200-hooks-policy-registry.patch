@@ -1,0 +1,61 @@
+From: NodeByte Browser Authors <dev@nodebyte.cn>
+Subject: [PATCH 0200] Register NodeByte custom policy keys and mount CloudOrgPolicyProvider
+
+注册全部 Custom* 自定义策略键进原生 policy 注册表，并把 CloudOrgPolicyProvider
+挂入 ProfilePolicyConnector 的 Provider 序列（优先级最高，提示词 5.3.1 / 附录A）。
+
+⚠️ 基线：Chromium 128 ——【需核实】
+- components/policy/core/common/policy_registry.cc 的注册宏形态
+- chrome/browser/policy/profile_policy_connector.cc / profile_impl.cc 的 Provider 组装顺序
+- chrome/browser/BUILD.gn 增加 "//chrome/browser/nodebyte" 依赖
+
+--- a/components/policy/core/common/policy_registry.cc
++++ b/components/policy/core/common/policy_registry.cc
+@@
+-// NodeByte custom keys are appended here.
++// ---- NodeByte custom policy keys (generated list, see
++// chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h) ----
++const policy::PolicyDetails* kNodeBytePolicyDetails[] = {
++    &kPolicyDetailsCustomRequire2FA,
++    &kPolicyDetailsCustomLockSyncServer,
++    &kPolicyDetailsCustomAllowSync,
++    &kPolicyDetailsCustomAllowExportBackup,
++    &kPolicyDetailsCustomSyncDisabledTypes,
++    &kPolicyDetailsCustomDisableRendererSandbox,
++    &kPolicyDetailsCustomAllowJavaScript,
++    &kPolicyDetailsCustomAllowWebSockets,
++    &kPolicyDetailsCustomWebsocketAllowList,
++    &kPolicyDetailsCustomWebsocketBlockedHosts,
++    &kPolicyDetailsCustomAllowWsUnderHttps,
++    &kPolicyDetailsCustomWebSocketAllowedHosts,
++    &kPolicyDetailsCustomWebSocketBlockedHosts,
++    &kPolicyDetailsCustomDisableSameOriginPolicy,
++    &kPolicyDetailsCustomCrossOriginAllowList,
++    &kPolicyDetailsCustomAllowReadForeignCookieOrigins,
++    &kPolicyDetailsCustomProxyVlessConfig,
++    &kPolicyDetailsSiteListMode,
++    &kPolicyDetailsCustomLocalStorageQuotaMB,
++    &kPolicyDetailsCustomCloudDropQuotaMB,
++    &kPolicyDetailsAllowDropCollaboration,
++};
+--- a/chrome/browser/policy/profile_policy_connector.cc
++++ b/chrome/browser/policy/profile_policy_connector.cc
+@@
++#include "chrome/browser/nodebyte/policy_extend/cloud_policy_provider.h"
+@@
+   // NodeByte cloud policy provider has the highest priority and must be
+   // installed before platform providers (提示词 5.3.1: 优先级最高).
++  auto nodebyte_provider = std::make_unique<nodebyte::CloudOrgPolicyProvider>(
++      policy::PolicyBundle(), policy::POLICY_DOMAIN_CHROME,
++      context->GetDefaultStoragePartition()
++          ->GetURLLoaderFactoryForBrowserProcess());
++  nodebyte_provider_ = nodebyte_provider.get();
++  providers_.push_back(std::move(nodebyte_provider));
++
+   // Chrome cloud policy...
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@
+   deps += [
++    "//chrome/browser/nodebyte",
+   ]

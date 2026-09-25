@@ -1,0 +1,27 @@
+From: NodeByte Browser Authors <dev@nodebyte.cn>
+Subject: [PATCH 0230] Replace offline dino game resources with NodeByte Runner
+
+离线小游戏替换（提示词 5.12）：
+- 移除原生断网页面 dino 游戏，替换自研 NodeByte Runner（HTML5+Canvas，
+  client/webui/offline-game/），静态资源放独立 grd（资源隔离，升级冲突最小）。
+
+⚠️ 基线：Chromium 128 ——【需核实】error_page 资源组织方式（grdp 目标名）。
+
+--- a/chrome/browser/resources/error_page_strings.grdp
++++ b/chrome/browser/resources/error_page_strings.grdp
+@@
+-  <message name="IDS_ERRORPAGE_FUN_DINO" desc="...">
+-    Dino game assets placeholder
+-  </message>
++  <!-- NodeByte: offline game replaced by NodeByte Runner (custom grd). -->
++  <message name="IDS_ERRORPAGE_FUN_DINO" desc="Offline game title">
++    NodeByte Runner
++  </message>
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@
+   grit_resources = [
+@@
++    # NodeByte offline game + webui (independent grd for low-conflict upgrades)
++    "//chrome/browser/resources/nodebyte:nodebyte_resources",
+   ]

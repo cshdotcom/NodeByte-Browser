@@ -1,0 +1,21 @@
+# ---- out/Release-pc/args.gn —— PC 发布版（提示词 附录B，需核实）----
+is_debug = false
+is_component_build = false          # 发布版关组件编译
+symbol_level = 0                    # 不带调试符号，减磁盘
+use_thin_lto = true                 # 发布开优化（内存爆炸风险：≥32GB；CI 不适用托管 Runner）
+is_official_build = true
+
+enable_nacl = false
+enable_widevine = false
+proprietary_codecs = false
+ffmpeg_branding = "Chromium"
+
+# 剥离谷歌服务（ungoogled-chromium 社区常用做法，需核实）
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+disable_fieldtrial_config = true
+
+# Windows 目标（在 Windows 构建机或配置 win cross 工具链时启用）
+# target_os = "win"
+# target_cpu = "x64"

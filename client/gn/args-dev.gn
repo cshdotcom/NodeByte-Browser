@@ -1,0 +1,20 @@
+# ---- out/Debug-pc/args.gn —— 开发调试版（PC，提示词 附录B，需核实）----
+# 组件编译：增量飞快、降内存；链接内存压力小，适合日常迭代
+is_debug = false
+is_component_build = true
+symbol_level = 0
+use_thin_lto = false
+
+enable_nacl = false
+enable_widevine = false
+proprietary_codecs = false
+ffmpeg_branding = "Chromium"
+
+# 剥离谷歌服务（ungoogled-chromium 社区常用做法，需核实参数名随版本变化）
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+disable_fieldtrial_config = true
+
+# Windows/Linux 交叉说明：Linux 构建机交叉编译 Windows 需 win cross 工具链（is_clang + target_os="win"），
+# 第一版建议在 Windows 机构建机直接编译 PC 版或先出 Linux 调试版验证补丁。

@@ -1,0 +1,35 @@
+From: NodeByte Browser Authors <dev@nodebyte.cn>
+Subject: [PATCH 0210] CustomDisableRendererSandbox: apply --no-sandbox at startup
+
+沙箱开关（提示词 5.8.1）：
+- mandatory 为 true 时浏览器启动追加 --no-sandbox（browser_process_impl.cc 读取策略设置启动参数）
+- ⚠️ 沙箱只能在进程启动时生效，运行时无效；策略修改后必须提示重启
+- ⚠️ 高危：关闭沙箱需后台二次确认 + 审计（服务端已实现），客户端此处只读策略
+
+⚠️ 基线：Chromium 128 ——【需核实】构造时序与 AppendSwitch 位置。
+
+--- a/chrome/browser/browser_process_impl.cc
++++ b/chrome/browser/browser_process_impl.cc
+@@
++#include "chrome/browser/nodebyte/policy_extend/nodebyte_policy_keys.h"
++#include "components/policy/core/browser/policy_pref_mapping.h"
+@@
+ BrowserProcessImpl::BrowserProcessImpl(...) {
+@@
+   // NodeByte: CustomDisableRendererSandbox=true → append --no-sandbox.
+   // Sandbox can only be disabled at process start; user is prompted to
+   // restart when the policy flips (提示词 5.8.1).
++  if (nodebyte::IsSandboxDisabledByPolicy()) {
++    base::CommandLine::ForCurrentProcess()->AppendSwitch(
++        switches::kNoSandbox);
++    LOG(WARNING) << "NodeByte: renderer sandbox DISABLED by organization "
++                    "policy (high-risk, audited on server side).";
++  }
+ }
+--- a/chrome/browser/nodebyte/nodebyte_policy_runtime.cc
++++ b/chrome/browser/nodebyte/nodebyte_policy_runtime.cc
+@@
++// 由 CloudOrgPolicyProvider 当前 PolicyMap 查询布尔策略
++bool IsSandboxDisabledByPolicy() {
++  return ReadPolicyBool(policy_keys::kDisableRendererSandbox, false);
++}

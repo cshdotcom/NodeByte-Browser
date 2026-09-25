@@ -1,0 +1,393 @@
+diff --git a/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.cc b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.cc
+new file mode 100644
+index 0000000..503057d
+--- /dev/null
++++ b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.cc
+@@ -0,0 +1,125 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++
++#include "chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h"
++
++#include <utility>
++
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++#include "chrome/browser/nodebyte/nodebyte_protocol.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/views/nodebyte/drop_panel_view.h"  // hook 0140 新增视图
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/views/controls/webview/webview.h"
++
++namespace nodebyte {
++
++DropSidePanelCoordinator::DropSidePanelCoordinator(Profile* profile)
++    : profile_(profile) {
++  // 内嵌 WebContents 加载 nodebyte://drop（Vue 应用；WebUI 层承担全部业务逻辑）
++  auto site = content::SiteInstance::CreateForURL(profile, MakeNodeByteUrl(kHostDrop));
++  content::WebContents::CreateParams params(profile, site);
++  contents_ = content::WebContents::Create(params);
++  Observe(contents_.get());
++}
++
++DropSidePanelCoordinator::~DropSidePanelCoordinator() = default;
++
++// static
++std::unique_ptr<DropSidePanelCoordinator> DropSidePanelCoordinator::Create(
++    Profile* profile, const gfx::Size& preferred_size) {
++  auto coordinator = base::WrapUnique(new DropSidePanelCoordinator(profile));
++  coordinator->web_view_ =
++      coordinator->GetView()->AsWebView();  // hook 0140 提供 WebView 容器
++  return coordinator;
++}
++
++views::View* DropSidePanelCoordinator::GetView() {
++  // hook 0140：DropPanelView（views::WebView 子类）持有 contents_
++  return nullptr;  // 由 DropPanelView 承载；此处占位保持接口完整
++}
++
++void DropSidePanelCoordinator::GetMessages(int32_t limit,
++                                           GetMessagesCallback callback) {
++  // GET /api/drop/messages → JSON → mojom::DropMessage 列表
++  std::move(callback).Run({});
++}
++
++bool DropSidePanelCoordinator::IsFileUploadAllowed() const {
++  // 用户组策略 allow_drop_file_screenshot=false → 发送文件/截图按钮置灰（后端同样校验）
++  return true;
++}
++
++void DropSidePanelCoordinator::PickAndUploadFiles(
++    PickAndUploadFilesCallback callback) {
++  if (!IsFileUploadAllowed()) {
++    std::move(callback).Run(0);
++    return;
++  }
++  // 系统文件选择器（多选）→ Mojo 读二进制 → 分片上传 MinIO（经后端预签名 URL）
++  // 大文件分片 + 断点续传 + 进度回显到侧边栏（提示词 F.4.3）
++  std::move(callback).Run(0);
++}
++
++void DropSidePanelCoordinator::CaptureTabScreenshot(
++    CaptureTabScreenshotCallback callback) {
++  // 网页截图：WebContents::CaptureSnapshot（仅网页内容，跨平台）
++  contents_->GetFocusedFrame();
++  // 【需核实】capture_snapshot 与 JPEG 编码回调（v1.2 Drop 增强，见路线图）
++  std::move(callback).Run(false);
++}
++
++void DropSidePanelCoordinator::CaptureDesktopScreenshot(
++    CaptureDesktopScreenshotCallback callback) {
++  // Windows 桌面全屏：依赖配套 Windows 辅助 exe（本地 IPC）；
++  // Android 不支持（返回 supported=false，UI 置灰）
++  std::move(callback).Run(false, false);
++}
++
++void DropSidePanelCoordinator::PushTab(const std::string& url,
++                                       const std::string& title,
++                                       const std::vector<std::string>& target_emails,
++                                       const std::vector<std::string>& target_device_ids,
++                                       PushTabCallback callback) {
++  // POST /api/drop/tab-push；后端写入推送消息并经 WebSocket 下发
++  std::move(callback).Run(0, {});
++}
++
++void DropSidePanelCoordinator::ShareSessionContext(
++    const std::string& password, const std::string& display_name,
++    const std::string& note_tag, const std::string& target_emails,
++    ShareSessionContextCallback callback) {
++  // 高危：发送前强制校验本机账号密码（后端强校验 + 审计）；
++  // 打包 Cookie 集 + 设备指纹标识 + localStorage（不含明文密码）→ AES-GCM 加密 → 上传
++  std::move(callback).Run(0);
++}
++
++void DropSidePanelCoordinator::AcceptSharedSession(
++    const std::string& shared_session_id) {
++  // 接受 → 进入多 Cookie 会话列表（可重命名/备注，标记来源）
++}
++
++void DropSidePanelCoordinator::RejectSharedSession(
++    const std::string& shared_session_id) {
++  // 拒绝 → 仅删除消息
++}
++
++void DropSidePanelCoordinator::UseSharedSession(
++    const std::string& shared_session_id) {
++  // 内核临时把该套 Cookie + 指纹注入当前标签页的隔离存储分区
++  //（不永久覆盖本机默认 Cookie 库，互不污染）；allow_forward_shared_session=false
++  // 时不能把外部会话同步进快照或二次转发。
++}
++
++void DropSidePanelCoordinator::OnServerPush(const std::string& payload_json) {
++  // WebSocket push_message → 侧边栏实时展示（可点击打开标签页推送）
++  if (contents_) {
++    contents_->GetPrimaryMainFrame()->ExecuteJavaScriptMethod(
++        u"window.__nodebyteDropPush", base::Value(payload_json), base::NullCallback());
++  }
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h
+new file mode 100644
+index 0000000..b9d96fd
+--- /dev/null
++++ b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h
+@@ -0,0 +1,83 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// Drop 侧边栏容器协调器（客户端提示词 5.4 / F.4）：
++//   自定义常驻侧边栏（不依赖谷歌原生 SidePanel 业务逻辑）：
++//   Windows：常驻侧边栏；Android：移入底部呼出菜单。
++//   容器内嵌 WebContents 加载 nodebyte://drop（Vue 页面），Mojo 双向通信。
++//   能力：消息、文件选择/上传、网页截图、标签页推送、Cookie 会话集切换、协作入口。
++
++#ifndef CHROME_BROWSER_NODEBYTE_DROP_DROP_SIDE_PANEL_COORDINATOR_H_
++#define CHROME_BROWSER_NODEBYTE_DROP_DROP_SIDE_PANEL_COORDINATOR_H_
++
++#include <memory>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/nodebyte/mojo/nodebyte.mojom.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
++#include "mojo/public/cpp/bindings/remote_set.h"
++#include "ui/views/view.h"
++
++namespace views {
++class WebView;
++}  // namespace views
++
++namespace nodebyte {
++
++class DropSidePanelCoordinator : public mojom::NodeByteDrop,
++                                 public content::WebContentsObserver {
++ public:
++  // 创建侧边栏视图（挂接浏览器窗口布局；Windows 常驻 / Android 底部菜单）
++  static std::unique_ptr<DropSidePanelCoordinator> Create(
++      Profile* profile, const gfx::Size& preferred_size);
++
++  DropSidePanelCoordinator(const DropSidePanelCoordinator&) = delete;
++  DropSidePanelCoordinator& operator=(const DropSidePanelCoordinator&) = delete;
++  ~DropSidePanelCoordinator() override;
++
++  // 挂到父视图（BrowserView 的非活动区域；【需核实】views 布局挂点）
++  views::View* GetView();
++
++  // mojom::NodeByteDrop（WebUI → 浏览器进程）
++  void GetMessages(int32_t limit, GetMessagesCallback callback) override;
++  void PickAndUploadFiles(PickAndUploadFilesCallback callback) override;
++  void CaptureTabScreenshot(CaptureTabScreenshotCallback callback) override;
++  void CaptureDesktopScreenshot(CaptureDesktopScreenshotCallback callback) override;
++  void PushTab(const std::string& url, const std::string& title,
++               const std::vector<std::string>& target_emails,
++               const std::vector<std::string>& target_device_ids,
++               PushTabCallback callback) override;
++  void ShareSessionContext(const std::string& password,
++                           const std::string& display_name,
++                           const std::string& note_tag,
++                           const std::string& target_emails,
++                           ShareSessionContextCallback callback) override;
++  void AcceptSharedSession(const std::string& shared_session_id) override;
++  void RejectSharedSession(const std::string& shared_session_id) override;
++  void UseSharedSession(const std::string& shared_session_id) override;
++
++  // 服务端推送到达（WebSocket push_message）→ 侧边栏实时刷新
++  void OnServerPush(const std::string& payload_json);
++
++ private:
++  explicit DropSidePanelCoordinator(Profile* profile);
++
++  // 策略置灰：disable_drop_file=true（用户组）→ 发送文件/截图按钮置灰
++  bool IsFileUploadAllowed() const;
++
++  raw_ptr<Profile> profile_;
++  std::unique_ptr<content::WebContents> contents_;
++  views::WebView* web_view_ = nullptr;  // 挂在原生视图树
++
++  mojo::ReceiverSet<mojom::NodeByteDrop> receivers_;
++  mojo::RemoteSet<mojom::NodeByteDropClient> clients_;
++
++  base::WeakPtrFactory<DropSidePanelCoordinator> weak_factory_{this};
++};
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_DROP_DROP_SIDE_PANEL_COORDINATOR_H_
+diff --git a/chrome/browser/nodebyte/fingerprint/fingerprint_profile.cc b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.cc
+new file mode 100644
+index 0000000..e4e2d35
+--- /dev/null
++++ b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.cc
+@@ -0,0 +1,93 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++
++#include "chrome/browser/nodebyte/fingerprint/fingerprint_profile.h"
++
++#include "base/files/file_util.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/strings/string_util.h"
++
++namespace nodebyte {
++
++FingerprintTemplate FingerprintTemplate::FromJson(
++    const base::Value::Dict& json) {
++  FingerprintTemplate t;
++  if (const std::string* v = json.FindString("userAgent")) t.user_agent = *v;
++  if (const std::string* v = json.FindString("acceptLanguage")) t.accept_language = *v;
++  if (const std::string* v = json.FindString("accept")) t.accept = *v;
++  if (const std::string* v = json.FindString("referer")) t.referer = *v;
++  if (const std::string* v = json.FindString("webdriver")) t.webdriver = *v;
++  if (const std::string* v = json.FindString("platform")) t.platform = *v;
++  t.hardware_concurrency = json.FindInt("hardwareConcurrency").value_or(0);
++  t.webgl_noise = json.FindBool("webglNoise").value_or(false);
++  t.audio_noise = json.FindBool("audioNoise").value_or(false);
++  if (const std::string* v = json.FindString("timezone")) t.timezone = *v;
++  if (const std::string* v = json.FindString("language")) t.language = *v;
++  t.screen_width = json.FindInt("screenWidth").value_or(0);
++  t.screen_height = json.FindInt("screenHeight").value_or(0);
++  return t;
++}
++
++base::Value::Dict FingerprintTemplate::ToJson() const {
++  base::Value::Dict d;
++  d.Set("userAgent", user_agent);
++  d.Set("acceptLanguage", accept_language);
++  d.Set("accept", accept);
++  d.Set("referer", referer);
++  d.Set("webdriver", webdriver);
++  d.Set("platform", platform);
++  d.Set("hardwareConcurrency", hardware_concurrency);
++  d.Set("webglNoise", webgl_noise);
++  d.Set("audioNoise", audio_noise);
++  d.Set("timezone", timezone);
++  d.Set("language", language);
++  d.Set("screenWidth", screen_width);
++  d.Set("screenHeight", screen_height);
++  return d;
++}
++
++FingerprintProfile::FingerprintProfile(const base::FilePath& profile_path)
++    : prefs_path_(profile_path.AppendASCII("nodebyte")
++                      .AppendASCII("fingerprint.json")) {}
++
++void FingerprintProfile::ApplyTemplate(const FingerprintTemplate& tpl) {
++  current_ = tpl;
++  // 生效点（hook 补丁 0220 落位后启用，见提示词 5.6.4）：
++  //   HTTP 层：services/network/public/cpp/resource_request.cc —— 请求头改写
++  //   渲染层：third_party/blink/renderer/core/frame/navigator_base.cc —— navigator 返回值
++  //   WebGL：third_party/blink/renderer/modules/webgl/ —— 画布噪声
++  //   Audio：AudioContext 输出扰动
++}
++
++void FingerprintProfile::SaveLocalOverride(const FingerprintTemplate& tpl) {
++  current_ = tpl;
++  std::string json;
++  base::JSONWriter::Write(tpl.ToJson(), &json);
++  base::CreateDirectory(prefs_path_.DirName());
++  base::WriteFile(prefs_path_, json);  // 自定义 UA 仅本地生效不上传（提示词 5.14.4）
++}
++
++void FingerprintProfile::ResetToDefault() {
++  current_ = FingerprintTemplate{};  // 恢复默认 NodeByte 标识
++  base::DeleteFile(prefs_path_);
++}
++
++bool FingerprintProfile::ShouldSpoofForUrl(const GURL& url) const {
++  // Edge 扩展商店 / Chrome 网上应用店 域名（【需核实】完整域列表）
++  const std::string host = url.host();
++  return base::EndsWith(host, "microsoftedge.com",
++                        base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(host, "chromewebstore.google.com",
++                        base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(host, "microsoft.com",
++                        base::CompareCase::INSENSITIVE_ASCII);
++}
++
++std::string FingerprintProfile::SpoofedUserAgent() const {
++  // 由策略 CustomSpoofBrowserVendor / CustomSpoofUserAgent 提供伪装值；
++  // Edge 商店伪装 Edge、Chrome 商店伪装 Chrome，避免商店拦截。
++  return current_.user_agent;
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/fingerprint/fingerprint_profile.h b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.h
+new file mode 100644
+index 0000000..f4f7d40
+--- /dev/null
++++ b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.h
+@@ -0,0 +1,68 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 浏览器指纹模板（客户端提示词 5.6 / F.5）：
++//   目标：不同设备使用同一套账号时指纹可以不同，防同 Cookie 跨设备风控。
++//   来源：后台策略下发模板（每设备可不同）+ 本地手动编辑；参与同步。
++//
++// 能力边界（必须向用户明示，提示词 13.9/13.10）：
++//   - TCP 层 IP 无法靠指纹修改（靠代理解决）
++//   - 部分硬件 ID 来自操作系统、沙盒内拿不到
++//   - 指纹只能混淆，不能保证 100% 绕过风控（风控 = IP + Cookie + 指纹 三位一体）
++
++#ifndef CHROME_BROWSER_NODEBYTE_FINGERPRINT_FINGERPRINT_PROFILE_H_
++#define CHROME_BROWSER_NODEBYTE_FINGERPRINT_FINGERPRINT_PROFILE_H_
++
++#include <string>
++
++#include "base/values.h"
++#include "url/gurl.h"
++
++namespace nodebyte {
++
++struct FingerprintTemplate {
++  // HTTP 层（resource_request.cc：改写请求头，每设备独立配置）
++  std::string user_agent;
++  std::string accept_language;
++  std::string accept;
++  std::string referer;
++
++  // JS API（navigator_base.cc / webgl / audio）
++  std::string webdriver;             // navigator.webdriver（"true"/"false"）
++  std::string platform;              // navigator.platform
++  int hardware_concurrency = 0;      // navigator.hardwareConcurrency（0=不改）
++  bool webgl_noise = false;          // WebGL 画布指纹加噪声
++  bool audio_noise = false;          // AudioContext 输出加扰动
++  std::string timezone;              // 时区模拟（空=跟随系统）
++  std::string language;              // navigator.language
++  int screen_width = 0;              // 屏幕分辨率模拟（0=不改）
++  int screen_height = 0;
++
++  static FingerprintTemplate FromJson(const base::Value::Dict& json);
++  base::Value::Dict ToJson() const;
++};
++
++class FingerprintProfile {
++ public:
++  explicit FingerprintProfile(const base::FilePath& profile_path);
++
++  // 加载：策略模板（CloudPolicyProvider 通知）或本地自定义（开发模式面板）
++  void ApplyTemplate(const FingerprintTemplate& tpl);
++  const FingerprintTemplate& current() const { return current_; }
++
++  // 本地自定义持久化（仅本地生效；开发模式开关控制 UI 可见性）
++  void SaveLocalOverride(const FingerprintTemplate& tpl);
++  void ResetToDefault();  // 恢复默认 NodeByte 标识
++
++  // 商店伪装（提示词 5.10.3）：访问 Edge/Chrome 扩展商店时 UA 伪装为原版浏览器；
++  // 普通网页仍用 NodeByte UA。由 CustomSpoofBrowserVendor/CustomSpoofUserAgent 控制。
++  bool ShouldSpoofForUrl(const GURL& url) const;
++  std::string SpoofedUserAgent() const;
++
++ private:
++  base::FilePath prefs_path_;  // <profile>/nodebyte/fingerprint.json
++  FingerprintTemplate current_;
++};
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_FINGERPRINT_FINGERPRINT_PROFILE_H_
