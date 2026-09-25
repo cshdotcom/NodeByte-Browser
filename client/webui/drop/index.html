@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NodeByte Drop</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="tabs">
+      <button class="tab active" data-tab="messages" data-i18n="messages">消息</button>
+      <button class="tab" data-tab="files" data-i18n="files">文件</button>
+      <button class="tab" data-tab="sessions" data-i18n="sessions">Cookie 会话</button>
+      <button class="tab" data-tab="collab" data-i18n="collab">协作</button>
+    </div>
+    <div class="me"><span id="meAvatar"></span><span id="meName">…</span></div>
+  </header>
+
+  <!-- 消息 / 标签页推送 -->
+  <main id="panel-messages" class="panel active">
+    <div class="quick">
+      <button id="btnPushTab" data-i18n="pushTab">推送当前标签页</button>
+      <button id="btnText" data-i18n="sendText">发送文本到设备</button>
+    </div>
+    <ul class="list" id="msgList"></ul>
+  </main>
+
+  <!-- 文件与截图（策略 disable_drop_file → 置灰） -->
+  <main id="panel-files" class="panel">
+    <div class="quick">
+      <button id="btnUpload" data-i18n="sendFile">发送文件</button>
+      <button id="btnShotTab" data-i18n="shotTab">网页截图</button>
+      <button id="btnShotDesktop" data-i18n="shotDesktop">桌面截图</button>
+    </div>
+    <ul class="list" id="fileList"></ul>
+  </main>
+
+  <!-- 多 Cookie 会话集（5.5） -->
+  <main id="panel-sessions" class="panel">
+    <div class="muted" data-i18n="sessHint">访问网站时检测域名 → 选择会话集 → 内核注入隔离存储</div>
+    <ul class="list" id="sessList"></ul>
+    <button id="btnNewSess" data-i18n="newSess">新建会话集</button>
+  </main>
+
+  <!-- 协作 -->
+  <main id="panel-collab" class="panel">
+    <div class="quick">
+      <button id="btnCollabCreate" data-i18n="startCollab">发起协作会话</button>
+    </div>
+    <div class="muted" data-i18n="collabHint">有效期链接 · 邮箱批量邀请 · 媒体申请由发起方审批</div>
+    <ul class="list" id="collabList"></ul>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

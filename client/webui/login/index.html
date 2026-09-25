@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NodeByte Browser · 登录</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="brand"><span class="logo">NB</span> NodeByte Browser</div>
+    <h1 data-i18n="title">登录 NodeByte 账号</h1>
+    <p class="sub" data-i18n="sub">同步 · DROP · 协作 · 多设备互通</p>
+
+    <form id="loginForm">
+      <div class="f"><label data-i18n="account">账号</label>
+        <input id="identifier" type="text" autocomplete="username" placeholder="you@example.com" required></div>
+      <div class="f"><label data-i18n="password">密码</label>
+        <input id="password" type="password" autocomplete="current-password" required></div>
+      <div class="f" id="totpRow" hidden><label data-i18n="totp">两步验证码</label>
+        <input id="totpCode" inputmode="numeric" maxlength="6" placeholder="123456"></div>
+      <button class="btn primary" type="submit" id="btnLogin" data-i18n="login">登 录</button>
+    </form>
+
+    <div class="links">
+      <a href="#" id="forgotLink" data-i18n="forgot">忘记密码</a>
+      <span id="serverAddr">bsync.nodebyte.cn</span>
+    </div>
+    <p class="notice" id="msg" hidden></p>
+    <p class="foot">Based on Chromium open-source project</p>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

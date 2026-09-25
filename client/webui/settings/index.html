@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NodeByte 设置 · 代理与同步</title>
+<style>
+:root { --bg:#f6f7f9; --card:#fff; --border:#e4e7ec; --text:#1a1d23; --dim:#6b7280; --primary:#2f6bff; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#14161b; --card:#1b1e26; --border:#2a2f3a; --text:#e8eaf0; --dim:#9aa3b2; --primary:#5b8bff; }
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,'Segoe UI','PingFang SC',sans-serif; background:var(--bg); color:var(--text); padding:20px; }
+h2 { font-size:16px; margin:18px 0 10px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; max-width:640px; }
+.f { margin-bottom:12px; }
+label { display:block; font-size:12px; color:var(--dim); font-weight:600; margin-bottom:5px; }
+input[type=text], input[type=url] { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--text); font-size:13.5px; }
+input:disabled { opacity:.55; cursor:not-allowed; }
+.locked { border-color: var(--primary) !important; }
+.masked { padding:9px 12px; border:1px dashed var(--primary); border-radius:9px; color:var(--dim); font-size:13px; background:rgba(47,107,255,.06); }
+.hint { font-size:11.5px; color:var(--dim); margin-top:5px; line-height:1.5; }
+.badge { font-size:11px; padding:2px 8px; border-radius:999px; background:rgba(47,107,255,.12); color:var(--primary); font-weight:700; }
+</style>
+</head>
+<body>
+<h2><span class="badge">mandatory 示例</span> 同步服务器地址</h2>
+<div class="card">
+  <div class="f">
+    <label>同步服务器地址 / Sync server</label>
+    <!-- CustomLockSyncServer=true：输入框置灰禁止修改（客户端提示词 4.3 / 5.2.5） -->
+    <input id="syncServer" type="url" value="bsync.nodebyte.cn" disabled>
+    <p class="hint">策略 CustomLockSyncServer=true 时锁定；切换服务器不删除本机任何数据，仅切换上报目标。</p>
+  </div>
+</div>
+
+<h2><span class="badge">敏感字段 UI 隐藏示例</span> 代理 / VLESS</h2>
+<div class="card">
+  <div class="f">
+    <label>代理服务器 / Proxy server</label>
+    <!-- sensitiveFields 包含 CustomProxyVlessConfig 时：隐藏真实 value，替换为受管控提示（5.3.3） -->
+    <input id="proxyServer" type="text" placeholder="socks5://127.0.0.1:1080">
+    <p class="hint">mandatory 下发时代理 UI 全灰，用户不能编辑节点；recommended 下发默认节点、用户可改。</p>
+  </div>
+  <div class="f">
+    <label>VLESS 节点（UUID / 密钥）</label>
+    <div id="vlessMasked" class="masked">此配置由组织管理员管控，不可查看和修改</div>
+    <input id="vlessConfig" type="text" hidden>
+    <p class="hint">敏感字段仅 UI 层隐藏：chrome://policy 与开发者工具仍可读取内存值（向用户明示）。</p>
+  </div>
+</div>
+
+<h2>开发模式</h2>
+<div class="card">
+  <div class="f">
+    <label>自定义 User-Agent（仅本地生效，不上传）</label>
+    <input id="customUa" type="text" placeholder="普通模式下此输入框置灰；开启开发模式后可编辑" disabled>
+    <p class="hint">保留简易「电脑/手机 UA 切换」；重置按钮恢复默认 NodeByte 标识（5.14.4）。</p>
+  </div>
+  <div class="f">
+    <label>指纹模板</label>
+    <input id="fp" type="text" placeholder="策略下发或本地自定义（WebGL 噪声 / 时区 / 分辨率…）">
+    <p class="hint">指纹仅混淆不保证绕过风控；TCP 层 IP 靠代理；硬件级 ID 不可改（5.6.5 能力边界）。</p>
+  </div>
+</div>
+
+<script>
+// 数据来源：mojo nodebyte.mojom.NodeBytePolicy（GetSensitiveFields / IsSyncServerLocked）
+// 演示逻辑：mandatory → 置灰；sensitiveFields → 隐藏明文
+const settings = {
+  mandatory: { CustomLockSyncServer: true, ProxyMode: 'fixed_servers' },
+  sensitiveFields: ['CustomProxyVlessConfig']
+};
+
+const syncServer = document.getElementById('syncServer');
+if (settings.mandatory.CustomLockSyncServer) syncServer.classList.add('locked');
+
+const proxy = document.getElementById('proxyServer');
+if (settings.mandatory.ProxyMode === 'fixed_servers') { proxy.disabled = true; proxy.value = ''; }
+
+if (settings.sensitiveFields.includes('CustomProxyVlessConfig')) {
+  document.getElementById('vlessMasked').hidden = false;
+  document.getElementById('vlessConfig').hidden = true;
+} else {
+  document.getElementById('vlessMasked').hidden = true;
+  document.getElementById('vlessConfig').hidden = false;
+}
+</script>
+</body>
+</html>

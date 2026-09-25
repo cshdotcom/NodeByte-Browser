@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NodeByte Runner · 离线小游戏</title>
+<style>
+html,body { margin:0; height:100%; background:#0f1115; font-family:-apple-system,'Segoe UI','PingFang SC',sans-serif; color:#e8eaf0; display:flex; align-items:center; justify-content:center; }
+.wrap { width:min(860px, 94vw); }
+h1 { font-size:16px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center; }
+h1 span { color:#9aa3b2; font-size:12px; font-weight:600; }
+canvas { width:100%; border-radius:14px; background:linear-gradient(#1a2030,#101520 70%); box-shadow:0 10px 40px rgba(0,0,0,.5); display:block; }
+.tip { color:#9aa3b2; font-size:12px; margin-top:8px; text-align:center; }
+kbd { background:#1d212b; border:1px solid #2a2f3a; border-radius:5px; padding:1px 6px; font-size:11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>NodeByte Runner <span>最高分 <b id="hi">0</b></span></h1>
+  <canvas id="game" width="880" height="300"></canvas>
+  <p class="tip"><kbd>空格</kbd>/<kbd>↑</kbd> 跳跃 · <kbd>↓</kbd> 俯冲 · <kbd>双击</kbd> 二段跳 · 撞到红色障碍结束；收集 <b>⚡能量</b> 获得护盾；离线完全可玩（替代 dino）</p>
+</div>
+<script src="game.js"></script>
+</body>
+</html>

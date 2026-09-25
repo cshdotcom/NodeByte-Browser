@@ -1,0 +1,29 @@
+/* nodebyte://login —— 登录页样式（与 WebUI 整体视觉一致） */
+:root {
+  --bg: #0f1115; --card: #171a21; --border: #2a2f3a; --text: #e8eaf0;
+  --dim: #9aa3b2; --primary: #5b8bff; --danger: #f97066; --ok: #47cd89;
+  --radius: 14px; --font: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f5f6f8; --card: #fff; --border: #e4e7ec; --text: #1a1d23; --dim: #6b7280; }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: radial-gradient(900px 420px at 15% -10%, rgba(91,139,255,.18), transparent), var(--bg); color: var(--text); min-height: 100vh; }
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.login-card { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; box-shadow: 0 8px 40px rgba(0,0,0,.25); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; margin-bottom: 22px; }
+.logo { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--primary), #8b5cf6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; }
+h1 { font-size: 19px; margin-bottom: 4px; }
+.sub { color: var(--dim); font-size: 12.5px; margin-bottom: 20px; }
+.f { margin-bottom: 14px; }
+.f label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 5px; font-weight: 600; }
+.f input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text); font-size: 14px; outline: none; font-family: var(--font); }
+.f input:focus { border-color: var(--primary); }
+.btn { width: 100%; padding: 11px; border: 0; border-radius: 10px; background: var(--primary); color: #fff; font-size: 14.5px; font-weight: 700; cursor: pointer; font-family: var(--font); margin-top: 4px; }
+.btn:disabled { opacity: .55; }
+.links { display: flex; justify-content: space-between; margin-top: 14px; font-size: 12.5px; }
+.links a { color: var(--primary); text-decoration: none; }
+.links span { color: var(--dim); }
+.notice { margin-top: 12px; padding: 9px 12px; border-radius: 9px; font-size: 12.5px; background: rgba(249,112,102,.12); color: var(--danger); }
+.notice.ok { background: rgba(71,205,137,.12); color: var(--ok); }
+.foot { margin-top: 18px; text-align: center; color: var(--dim); font-size: 11px; }
