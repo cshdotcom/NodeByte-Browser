@@ -152,6 +152,17 @@ CREATE TABLE IF NOT EXISTS user_shared_session_store (
 );
 CREATE INDEX IF NOT EXISTS idx_shared_owner ON user_shared_session_store(owner_user_id);
 
+-- 会话分享两步流（create→confirm）暂存表
+CREATE TABLE IF NOT EXISTS pending_share_sessions (
+  session_id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_user_id      uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  display_name        text,
+  note_tag            text,
+  minio_encrypted_key text NOT NULL,
+  target_emails       text[] NOT NULL DEFAULT '{}',
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+
 -- ---------------------------------------------------------------------
 -- 4. 协作
 -- ---------------------------------------------------------------------
