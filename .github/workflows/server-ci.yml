@@ -1,0 +1,63 @@
+name: Build-NodeByte-Server
+
+# 服务端 CI（GitHub 托管 Runner 即可，资源消耗小；服务端提示词 附录C.1）
+# 产物：Next.js standalone 包（可部署 Linux 容器）
+
+on:
+  push:
+    branches: [main, 'release/*']
+    paths:
+      - 'server/**'
+      - '.github/workflows/server-ci.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Build (standalone)
+        run: npm run build
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          JWT_SECRET: ci-only-secret-not-for-production
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Sanity check standalone output
+        run: |
+          test -f .next/standalone/server.js || { echo "standalone server.js missing"; exit 1; }
+          echo "standalone bundle OK"
+
+      - name: ws-service syntax check
+        run: node --check ws-service/index.mjs && node --check scripts/bootstrap.mjs
+
+      - name: Upload standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-standalone
+          path: |
+            server/.next/standalone
+            server/.next/static
+          retention-days: 14

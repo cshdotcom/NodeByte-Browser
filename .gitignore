@@ -25,3 +25,4 @@ client/chromium/
 .idea/
 .vscode/
 *.swp
+server/tsconfig.tsbuildinfo

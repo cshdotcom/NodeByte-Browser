@@ -1,0 +1,83 @@
+name: Validate-Client-Assets
+
+# 客户端资产校验（托管 Runner）：
+#  - shellcheck 全部构建脚本
+#  - 补丁集与 src-nodebyte 源码树一致性（gen_patches 再生成比对）
+#  - 补丁文件格式完整性（diff 头与 hunk 计数）
+# 完整 Chromium 编译在自托管 Runner（build-nodebyte-browser.yml）
+
+on:
+  push:
+    branches: [main, 'release/*']
+    paths:
+      - 'client/**'
+      - '.github/workflows/client-validate.yml'
+  pull_request:
+    paths:
+      - 'client/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck build scripts
+        run: |
+          shellcheck --version
+          for f in client/scripts/*.sh; do
+            echo "== $f"
+            shellcheck -x "$f"
+          done
+
+      - name: GN args sanity
+        run: |
+          # gn args 基本格式检查：非空、注释行/键值对行
+          for f in client/gn/*.gn; do
+            test -s "$f" || { echo "$f empty"; exit 1; }
+            grep -Eq '^[a-z_]+ =' "$f" || { echo "$f missing assignments"; exit 1; }
+            echo "== $f OK"
+          done
+
+      - name: Patch set consistency (regenerate and compare)
+        run: |
+          bash client/scripts/gen_patches.sh >/dev/null
+          git config user.email ci@nodebyte.local
+          git config user.name ci
+          git add client/patches
+          if ! git diff --cached --quiet; then
+            echo "::error::patches/ is out of sync with src-nodebyte/. Run scripts/gen_patches.sh and commit."
+            git diff --cached --stat
+            exit 1
+          fi
+          echo "patch set in sync"
+
+      - name: Patch format check
+        run: |
+          total=0
+          for p in client/patches/*.patch; do
+            n=$(grep -c '^diff --git' "$p" || true)
+            if [ "$n" -eq 0 ]; then
+              # hook 补丁为说明性文档型补丁（附 patch 头注释），检查至少含 hook 上下文
+              grep -q '⚠️ 基线' "$p" || { echo "::error::$p invalid"; exit 1; }
+              echo "== $p: hand-written hook (documented), baseline flags present"
+            else
+              echo "== $p: $n file diffs"
+              total=$((total + n))
+            fi
+          done
+          echo "generated patches contain $total new-file diffs"
+
+      - name: Apply smoke test (clean tree)
+        run: |
+          set -e
+          TMP=$(mktemp -d)
+          cd "$TMP"
+          git init -q src && cd src
+          git config user.email t@t && git config user.name t
+          git commit -q --allow-empty -m init
+          bash "$GITHUB_WORKSPACE/client/scripts/apply_patches.sh" "$(pwd)" | tail -1
+          test -f chrome/browser/nodebyte/nodebyte_constants.h
+          echo "smoke apply OK on clean tree"

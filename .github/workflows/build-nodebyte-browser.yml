@@ -1,0 +1,109 @@
+name: Build-NodeByte-Browser
+
+# 完整 Chromium 编译（自托管 Runner，标签 linux-build-box；客户端提示词 10.2.2 / 附录C）
+#
+# 前提（docs/build-client.md 有全流程）：
+#   1. 构建机：Ubuntu 24.04，PC ≥16核/32GB/250GB NVMe；PC+Android 32核/64GB/350GB
+#   2. 注册 runner：
+#        ./config.sh --url https://github.com/cshdotcom/chromium-build --token <RUNNER_TOKEN> --labels linux-build-box
+#   3. 构建机持久磁盘缓存 ~/chromium（源码+out 勿清理，增量编译依赖）
+#
+# 注意：本工作流在注册对应标签 runner 前会一直排队等待（不会失败）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Build target'
+        required: true
+        default: pc
+        type: choice
+        options: [pc, android, both]
+      mode:
+        description: 'Build mode'
+        required: true
+        default: release
+        type: choice
+        options: [release, dev]
+  push:
+    branches: ['release/*']
+    tags: ['v*']
+    paths:
+      - 'client/**'
+
+jobs:
+  build-pc:
+    if: ${{ github.event_name == 'push' || inputs.target == 'pc' || inputs.target == 'both' }}
+    runs-on: [self-hosted, linux-build-box]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show build box
+        run: |
+          echo "CPUs: $(nproc)  MEM: $(free -g | awk '/Mem/{print $2}')GB  DISK: $(df -h $HOME | tail -1 | awk '{print $4}') free"
+          nproc; free -h; df -h
+
+      - name: Sync Chromium source (cached on runner)
+        run: bash client/scripts/sync_chromium.sh
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+          CHROMIUM_BASELINE: 128.0.6613.0   # 需核实
+
+      - name: Apply patches
+        run: bash client/scripts/apply_patches.sh "${CHROMIUM_DIR}/src"
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+
+      - name: Build PC (${{ inputs.mode || 'release' }})
+        run: bash client/scripts/build_pc.sh "${CHROMIUM_DIR}/src"
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+          MODE: ${{ inputs.mode || 'release' }}
+
+      - name: Stage Windows packaging
+        run: bash client/scripts/package_windows.sh "${CHROMIUM_DIR}/src"
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+        continue-on-error: true   # Windows 交叉产物存在时才有意义
+
+      - name: Upload chrome artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodebyte-pc-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/chromium/src/out/Release-pc/chrome
+            ${{ runner.temp }}/chromium/src/out/Release-pc/chrome.exe
+          if-no-files-found: warn
+          retention-days: 30
+
+  build-android:
+    if: ${{ github.event_name == 'push' || inputs.target == 'android' || inputs.target == 'both' }}
+    runs-on: [self-hosted, linux-build-box]
+    needs: build-pc
+    timeout-minutes: 420
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync Android deps
+        run: bash client/scripts/sync_chromium_android.sh
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+
+      - name: Apply patches
+        run: bash client/scripts/apply_patches.sh "${CHROMIUM_DIR}/src"
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+
+      - name: Build Android APK
+        run: bash client/scripts/build_android.sh "${CHROMIUM_DIR}/src"
+        env:
+          CHROMIUM_DIR: ${{ runner.temp }}/chromium
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodebyte-android-apk-${{ github.sha }}
+          path: ${{ runner.temp }}/chromium/src/out/Release-android/apks/NodeByteBrowser.apk
+          if-no-files-found: warn
+          retention-days: 30
