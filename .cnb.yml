@@ -68,13 +68,10 @@ main:
   web_trigger:
     - name: nodebyte-chromium-build
       docker:
-        image: ubuntu:24.04
+        image: python:3.12-bookworm   # buildpack-deps：自带 python3/git/curl/wget/xz（ depot_tools 依赖），免 apt 提升确定性
       runner:
         cpus: 16
       stages:
-        - name: 安装基础工具（ubuntu 镜像默认无 git/curl/python3）
-          script:
-            - apt-get update -qq && apt-get install -y -qq git curl wget ca-certificates python3 bzip2 xz-utils unzip rsync lsb-release file
         - name: 构建开始标记（推 tag ci-build-start-<sha> 供外部监控）
           script:
             - TAG=ci-build-start-$(git rev-parse --short HEAD)
@@ -96,13 +93,10 @@ chromium-build:
   push:
     - name: nodebyte-chromium-build
       docker:
-        image: ubuntu:24.04
+        image: python:3.12-bookworm   # buildpack-deps：自带 python3/git/curl/wget/xz（ depot_tools 依赖），免 apt 提升确定性
       runner:
         cpus: 16
       stages:
-        - name: 安装基础工具（ubuntu 镜像默认无 git/curl/python3）
-          script:
-            - apt-get update -qq && apt-get install -y -qq git curl wget ca-certificates python3 bzip2 xz-utils unzip rsync lsb-release file
         - name: 构建开始标记（推 tag ci-build-start-<sha> 供外部监控）
           script:
             - TAG=ci-build-start-$(git rev-parse --short HEAD)
