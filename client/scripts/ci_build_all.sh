@@ -9,7 +9,10 @@
 #   2) sync_webui.sh：grd 引用的页面源码必须同步进树，缺失 = 资源打包失败；
 #   3) 默认用 args-hosted-pc.gn（关 ThinLTO/is_official_build，适配 16 核云机内存）。
 set -euo pipefail
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "${REPO_ROOT}" ]; then
+  REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")../.." && pwd)"
+fi
 WORK="${CHROMIUM_WORKDIR:-/work/chromium-cache}"   # 持久缓存盘（源码 + out/）
 SRC="${WORK}/src"
 
