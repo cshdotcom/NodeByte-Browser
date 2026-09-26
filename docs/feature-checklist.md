@@ -217,6 +217,13 @@
 | 9 | 加速器第三方代理协议 | ✅ | docs/accelerator.md 矩阵（8 协议 + 订阅）+ 策略键 + UI |
 | 10 | 服务端指令可撤销（开关翻转/地址清空/搜索引擎回编译默认） | ✅ | policy_directive revoke + DirectiveApplier + policy-dictionary.md 五 |
 
+## 三b、v1.4.0 用户新增需求专项
+
+| # | 需求（用户原话要点） | 状态 | 落点 |
+|---|---|---|---|
+| 1 | 翻译功能，使用开源免费翻译 API | ✅ | server/src/lib/translate.ts（多供应商：LibreTranslate/Lingva/MyMemory/DeepLX 自动降级 + 缓存）+ /api/translate + /api/admin/translate-config + nodebyte://translate WebUI + 设置页入口 + C++ TranslateController（整页/选区翻译 + DOM 还原）+ patch 0180 + docs/translate.md |
+| 2 | CNB 只有 2 次编译机会，必须确保编译成功 | ✅ | 翻译功能不触发 CNB 全量编译（仅 lite-validate）；docs/translate.md 七节明确「不要触发 web_trigger」+ 建议先在 GitHub Actions 跑通再上 CNB |
+
 ## 四、待 CI/二期事项（诚实清单）
 
 1. **客户端编译产物**：三平台工作流 Fetch/补丁阶段已打通，完整编译需自托管

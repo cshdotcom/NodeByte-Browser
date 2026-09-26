@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-26
+
+### Added（开源免费翻译 API + CNB 编译机会保护）
+
+- **翻译功能**（用户需求：开源免费翻译 API，docs/translate.md）：
+  - **多供应商聚合 + 自动降级**：服务端 `server/src/lib/translate.ts` 按 weight 依次尝试 **LibreTranslate → Lingva → MyMemory → DeepLX**，首个 200 OK 即返回；全部失败抛 AggregateError（含每供应商错误明细）
+  - **零依赖 API Key**：默认全部走公共实例（libretranslate.de / lingva.ml / api.mymemory.translated.net 等），自托管时管理员在 `/api/admin/translate-config` 配置 `providers[]`（含 endpoint/apiKey/weight）
+  - **服务端缓存**：in-process Map 缓存（key=sha256(text)+lang 对，TTL 默认 168h=7 天），命中即返回 cached=true，避免烧公共实例配额
+  - **接口**：`GET /api/translate`（语言列表 + 当前 providers，脱敏不含 apiKey）；`POST /api/translate`（text/source/target/format）；`GET/PUT /api/admin/translate-config`（管理员配置）
+  - **客户端 C++**：`chrome/browser/nodebyte/translate/translate_controller.{h,cc}` —— 整页翻译（收集文本节点 → 分批 ≤ NodeByteTranslateMaxChars 字符 → 串行调 /api/translate → 注入 JS 原地替换 DOM 保留样式 → 工具栏「已翻译✓/还原」按钮）+ 选区翻译（右键菜单 → 单次请求 → 气泡展示）+ `RestorePage()` 还原原文；patch 0180 生成并干跑验证干净应用
+  - **WebUI**：`nodebyte://translate` 独立翻译面板（源/目标下拉 + 文本框 + 复制/朗读/交换/清空）；`nodebyte://settings` 新增「翻译」段（provider 选择 / 目标语言 / 「打开翻译面板」/「翻译当前页」按钮）
+  - **策略键**：`NodeByteTranslateEnabled`（默认 true）/ `NodeByteTranslateAllowAnonymous`（默认 false）/ `NodeByteTranslateMaxChars`（默认 5000），全部纳入指令下发/撤销通道（撤销 → 恢复默认/清空）
+  - **SQL**：system_setting 新增 `translate_config` 种子；审计 `user_security_log.event_type='translate_text'`（默认关，可由管理员 auditLog 开关启用）
+- **CNB 编译机会保护**（用户提醒：只有 2 次编译机会）：
+  - docs/translate.md 七节明确「翻译功能不触发 CNB 全量编译」—— 仅 lite-validate（Shell 语法/补丁干跑/tsc/standalone 构建/CSV 自测），全部确定性通过
+  - 建议流程：先在 GitHub Actions 跑通 → 再上 CNB；不要轻易触发 `web_trigger: nodebyte-chromium-build`
+  - 仅当确需 Chromium 产物时才用 CNB 核时；本次提交后默认 push 不消耗核时
+
 ## [1.3.2] - 2026-09-25
 
 ### Fixed（客户端资产校验工作流修复）

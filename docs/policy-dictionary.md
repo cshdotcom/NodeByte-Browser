@@ -107,6 +107,16 @@ VMess/VLESS/Trojan/SS 经本地 Xray 方案 B + 订阅链接）。
 
 见 docs/data-import.md（三通道：本机 CSV / 账号待下发区 / 浏览器一键导入）。
 
+## 翻译（v1.4.0）
+
+| 键 | 类型 | 执行点 |
+|---|---|---|
+| `NodeByteTranslateEnabled` | bool | 翻译总开关（nodebyte://translate + 工具栏翻译按钮 + 设置页入口） |
+| `NodeByteTranslateAllowAnonymous` | bool | 是否允许未登录用户翻译（默认 false，仅登录用户可用） |
+| `NodeByteTranslateMaxChars` | int | 单次翻译字符上限（默认 5000，避免烧公共实例配额） |
+
+见 docs/translate.md（开源多供应商：LibreTranslate / Lingva / MyMemory / DeepLX）。
+
 ## 五、策略指令（下发 / 撤销，v1.3.0）★
 
 在三层策略（全局 < 用户组 < 用户 override）之上新增**指令**通道，作用域支持

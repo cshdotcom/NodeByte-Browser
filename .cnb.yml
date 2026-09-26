@@ -50,6 +50,9 @@ main:
         - name: CSV 导入解析自检（零依赖 Node 单测）
           script:
             - node server/scripts/csv-selftest.mjs
+        - name: 翻译引擎自检（零依赖 Node 单测；v1.4 新增）
+          script:
+            - node server/scripts/translate-selftest.mjs
 
   # 手动触发（CNB 网页 → 构建 → web_trigger）：Chromium 全量编译
   # 仅在确有产物需求时手动运行，避免烧核时。

@@ -17,6 +17,9 @@
 | `0130-nodebyte-cookie-sessions.patch` | 多 Cookie 会话集（加密 SQLite、隔离注入） | 新增文件 | any | 🟡 |
 | `0140-nodebyte-drop.patch` | Drop 侧边栏协调器 + 指纹模板 | 新增文件 | 128 | 🟡 |
 | `0150-nodebyte-webui.patch` | nodebyte://login / drop WebUI 控制器 | 新增文件 | 128 | 🟡 |
+| `0160-nodebyte-extensions.patch` | 扩展手动安装器（crx/zip，含安卓 SAF 管线） | 新增文件 | 128 | 🟡 |
+| `0170-nodebyte-import.patch` | CSV/浏览器数据导入器（密码/书签/历史） | 新增文件 | 128 | 🟢 |
+| `0180-nodebyte-translate.patch` | 翻译控制器（开源多供应商 API，整页/选区翻译 + DOM 还原） | 新增文件 | 128 | 🟢 |
 | `0200-hooks-policy-registry.patch` | 注册 Custom* 策略键进 policy_registry.cc + Provider 挂接 | hook | **需核实** | 🟡 |
 | `0210-hooks-sandbox-flag.patch` | CustomDisableRendererSandbox → 启动参数（高危：二次确认+审计+重启提示） | hook | **需核实** | 🔴 |
 | `0220-hooks-js-ws-policy.patch` | JS 开关 / WS 黑白名单 / 混合内容 ws:// / 指纹注入点 | hook | **需核实** | 🔴 |

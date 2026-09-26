@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NodeByte 翻译 · 开源多供应商翻译</title>
+<style>
+:root {
+  --bg:#f6f7f9; --card:#fff; --border:#e4e7ec; --text:#1a1d23; --dim:#6b7280;
+  --primary:#2f6bff; --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#14161b; --card:#1b1e26; --border:#2a2f3a; --text:#e8eaf0; --dim:#9aa3b2;
+    --primary:#5b8bff; --ok:#4ade80; --warn:#fbbf24; --err:#f87171;
+  }
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  background:var(--bg); color:var(--text);
+  min-height:100vh; padding:20px;
+}
+header { max-width:780px; margin:0 auto 18px; display:flex; align-items:center; gap:12px; }
+header .logo { width:36px; height:36px; }
+header h1 { font-size:20px; font-weight:700; }
+header .sub { font-size:12.5px; color:var(--dim); margin-top:2px; }
+main { max-width:780px; margin:0 auto; }
+.card {
+  background:var(--card); border:1px solid var(--border); border-radius:12px;
+  padding:18px; margin-bottom:14px;
+}
+.row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+.f { display:flex; flex-direction:column; gap:5px; }
+.f.grow { flex:1; min-width:160px; }
+label { font-size:11.5px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+select, textarea, input[type=text] {
+  width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:9px;
+  background:transparent; color:var(--text); font-size:13.5px; font-family:inherit;
+}
+textarea { min-height:120px; resize:vertical; line-height:1.5; }
+textarea[readonly] { background:rgba(47,107,255,.04); }
+.btn {
+  padding:9px 16px; border-radius:9px; border:1px solid var(--border);
+  background:transparent; color:var(--text); font-size:13px; cursor:pointer;
+  font-weight:500;
+}
+.btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
+.btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn.primary:hover:not(:disabled) { opacity:.9; color:#fff; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.bar { display:flex; gap:6px; align-items:center; }
+.swap { font-size:18px; padding:8px 12px; }
+.hint { font-size:11.5px; color:var(--dim); line-height:1.6; margin-top:8px; }
+.badge {
+  display:inline-block; font-size:10.5px; padding:2px 8px; border-radius:999px;
+  background:rgba(47,107,255,.12); color:var(--primary); font-weight:700;
+  margin-left:8px;
+}
+.meta { display:flex; gap:14px; margin-top:10px; font-size:11.5px; color:var(--dim); flex-wrap:wrap; }
+.meta .ok { color:var(--ok); font-weight:600; }
+.meta .err { color:var(--err); font-weight:600; }
+.toast {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:var(--card); border:1px solid var(--border); border-radius:9px;
+  padding:10px 16px; font-size:13px; box-shadow:0 4px 18px rgba(0,0,0,.08);
+  opacity:0; transition:opacity .2s; pointer-events:none;
+}
+.toast.show { opacity:1; }
+.chars { font-size:11px; color:var(--dim); text-align:right; margin-top:4px; }
+.chars.over { color:var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 30 C 12 12, 36 12, 40 30" stroke="url(#g)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="14" cy="22" r="2.4" fill="#2f6bff"/>
+    <circle cx="24" cy="16" r="2.4" fill="#5b8bff"/>
+    <circle cx="34" cy="22" r="2.4" fill="#2f6bff"/>
+    <defs><linearGradient id="g" x1="0" y1="0" x2="48" y2="48">
+      <stop offset="0" stop-color="#2f6bff"/><stop offset="1" stop-color="#5b8bff"/>
+    </linearGradient></defs>
+  </svg>
+  <div>
+    <h1>NodeByte 翻译 <span class="badge">开源 · 多供应商</span></h1>
+    <div class="sub">LibreTranslate · Lingva · MyMemory · DeepLX — 自动降级，无需付费 API Key</div>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="row">
+      <div class="f" style="min-width:180px">
+        <label>源语言</label>
+        <select id="srcLang"></select>
+      </div>
+      <button class="btn swap" id="swapBtn" title="交换源/目标">⇄</button>
+      <div class="f" style="min-width:180px">
+        <label>目标语言</label>
+        <select id="tgtLang"></select>
+      </div>
+      <button class="btn primary" id="translateBtn" style="min-width:120px">翻译</button>
+    </div>
+
+    <div style="margin-top:14px" class="f">
+      <label>原文（最多 5000 字符）</label>
+      <textarea id="srcText" placeholder="输入要翻译的文本，或粘贴网页片段…"></textarea>
+      <div class="chars" id="srcChars">0 / 5000</div>
+    </div>
+
+    <div style="margin-top:14px" class="f">
+      <label>译文</label>
+      <textarea id="tgtText" readonly placeholder="译文将显示在这里…"></textarea>
+      <div class="bar" style="margin-top:6px; justify-content:space-between">
+        <div class="meta" id="meta"></div>
+        <div>
+          <button class="btn" id="copyBtn">复制译文</button>
+          <button class="btn" id="speakBtn">朗读译文</button>
+          <button class="btn" id="clearBtn">清空</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">
+      所有请求经服务端聚合，按权重依次尝试 LibreTranslate / Lingva / MyMemory / DeepLX；
+      命中缓存直接返回（cached=true）。管理员可在「后台 → 翻译配置」中切换自托管实例或关闭功能。
+      <br>策略 <code>NodeByteTranslateEnabled=false</code> 时入口隐藏；<code>NodeByteTranslateMaxChars</code> 限制单次字符数。
+    </p>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SYNC_BASE = (window.__NODEBYTE__ && window.__NODEBYTE__.syncServer) || '';
+const API = SYNC_BASE ? `${SYNC_BASE.replace(/\/$/, '')}/api/translate` : '/api/translate';
+const MAX_CHARS = (window.__NODEBYTE__ && window.__NODEBYTE__.translateMaxChars) || 5000;
+
+const srcSelect = document.getElementById('srcLang');
+const tgtSelect = document.getElementById('tgtLang');
+const srcText = document.getElementById('srcText');
+const tgtText = document.getElementById('tgtText');
+const meta = document.getElementById('meta');
+const charsEl = document.getElementById('srcChars');
+const translateBtn = document.getElementById('translateBtn');
+
+// 默认语言列表（与服务端 COMMON_LANGUAGES 对齐；网络失败时使用）
+const FALLBACK_LANGS = [
+  { code: 'auto', name: '自动检测' },
+  { code: 'zh-CN', name: '简体中文' },
+  { code: 'zh-TW', name: '繁體中文' },
+  { code: 'en', name: 'English' },
+  { code: 'ja', name: '日本語' },
+  { code: 'ko', name: '한국어' },
+  { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'es', name: 'Español' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'pt', name: 'Português' },
+  { code: 'ru', name: 'Русский' },
+  { code: 'ar', name: 'العربية' },
+  { code: 'hi', name: 'हिन्दी' },
+  { code: 'th', name: 'ไทย' },
+  { code: 'vi', name: 'Tiếng Việt' },
+  { code: 'id', name: 'Bahasa Indonesia' },
+  { code: 'tr', name: 'Türkçe' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'pl', name: 'Polski' },
+];
+
+function fillLangs(list) {
+  for (const el of [srcSelect, tgtSelect]) {
+    el.innerHTML = '';
+    for (const l of list) {
+      const o = document.createElement('option');
+      o.value = l.code; o.textContent = l.name;
+      el.appendChild(o);
+    }
+  }
+  srcSelect.value = 'auto';
+  tgtSelect.value = 'zh-CN';
+}
+
+fillLangs(FALLBACK_LANGS);
+
+// 拉取服务端语言列表 + 默认目标语言
+fetch(API, { credentials: 'include' })
+  .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+  .then(j => {
+    if (j.data && j.data.languages) fillLangs(j.data.languages);
+    if (j.data && j.data.defaultTarget) tgtSelect.value = j.data.defaultTarget;
+  })
+  .catch(() => { /* 离线/未登录 → 用 FALLBACK_LANGS */ });
+
+// 字符计数
+srcText.addEventListener('input', () => {
+  const n = srcText.value.length;
+  charsEl.textContent = `${n} / ${MAX_CHARS}`;
+  charsEl.classList.toggle('over', n > MAX_CHARS);
+  translateBtn.disabled = n === 0 || n > MAX_CHARS;
+});
+
+// 翻译
+translateBtn.addEventListener('click', async () => {
+  const text = srcText.value.trim();
+  if (!text) return;
+  if (text.length > MAX_CHARS) {
+    showToast(`超过单次翻译上限 ${MAX_CHARS} 字符`);
+    return;
+  }
+  translateBtn.disabled = true;
+  meta.innerHTML = '<span class="dim">翻译中…</span>';
+  tgtText.value = '';
+  try {
+    const resp = await fetch(API, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        source: srcSelect.value,
+        target: tgtSelect.value,
+        format: 'text',
+      }),
+    });
+    const j = await resp.json();
+    if (!resp.ok || j.code !== 0) {
+      throw new Error(j.message || j.error || `HTTP ${resp.status}`);
+    }
+    const r = j.data;
+    tgtText.value = r.translatedText;
+    const providerLabel = ({
+      libretranslate: 'LibreTranslate',
+      lingva: 'Lingva',
+      mymemory: 'MyMemory',
+      deeplx: 'DeepLX',
+    })[r.provider] || r.provider;
+    meta.innerHTML = `
+      <span class="ok">✓ ${providerLabel}</span>
+      <span>${r.cached ? '缓存命中' : '实时翻译'}</span>
+      ${r.detectedSource ? `<span>检测：${r.detectedSource}</span>` : ''}
+      <span style="opacity:.7">${new Date().toLocaleTimeString()}</span>
+    `;
+  } catch (e) {
+    meta.innerHTML = `<span class="err">✗ ${e.message}</span>`;
+  } finally {
+    translateBtn.disabled = srcText.value.length === 0 || srcText.value.length > MAX_CHARS;
+  }
+});
+
+// 交换源/目标
+document.getElementById('swapBtn').addEventListener('click', () => {
+  if (srcSelect.value === 'auto') {
+    // 不能把 'auto' 设为目标，退回 zh-CN
+    srcSelect.value = tgtSelect.value;
+    tgtSelect.value = 'zh-CN';
+  } else {
+    const t = srcSelect.value; srcSelect.value = tgtSelect.value; tgtSelect.value = t;
+  }
+  const a = srcText.value; srcText.value = tgtText.value; tgtText.value = a;
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  if (!tgtText.value) return;
+  navigator.clipboard.writeText(tgtText.value).then(() => showToast('已复制到剪贴板'));
+});
+
+document.getElementById('speakBtn').addEventListener('click', () => {
+  if (!tgtText.value) return;
+  // 调用浏览器自带 TTS（与电子书/PDF 朗读分离，本接口不依赖 Edge TTS）
+  const u = new SpeechSynthesisUtterance(tgtText.value);
+  u.lang = tgtSelect.value;
+  speechSynthesis.speak(u);
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  srcText.value = ''; tgtText.value = '';
+  meta.innerHTML = '';
+  charsEl.textContent = `0 / ${MAX_CHARS}`;
+  translateBtn.disabled = true;
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+translateBtn.disabled = true;
+</script>
+</body>
+</html>

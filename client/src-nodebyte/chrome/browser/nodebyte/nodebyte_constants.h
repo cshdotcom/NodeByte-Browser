@@ -24,6 +24,7 @@ inline constexpr std::string_view kHostDrop = "drop";
 inline constexpr std::string_view kHostSettings = "settings";
 inline constexpr std::string_view kHostUserCenter = "usercenter";
 inline constexpr std::string_view kHostGame = "game";
+inline constexpr std::string_view kHostTranslate = "translate";
 
 // 默认同步服务地址（提示词 4.3；设置页展示，策略 CustomLockSyncServer=true 时置灰）
 inline constexpr std::string_view kDefaultSyncServer = "bsync.nodebyte.cn";
@@ -40,6 +41,14 @@ inline constexpr int kDeviceStatusReportSeconds = 30;
 
 // 本地导出备份扩展名（提示词 5.2.4：本地完成、不经过服务端）
 inline constexpr std::string_view kBackupExtension = ".custom-browser-backup";
+
+// 翻译策略键（与 server/src/lib/policy-defaults.ts 对齐）
+inline constexpr std::string_view kPolicyNodeByteTranslateEnabled = "NodeByteTranslateEnabled";
+inline constexpr std::string_view kPolicyNodeByteTranslateAllowAnonymous = "NodeByteTranslateAllowAnonymous";
+inline constexpr std::string_view kPolicyNodeByteTranslateMaxChars = "NodeByteTranslateMaxChars";
+
+// 翻译默认目标语言（与 server/src/lib/translate.ts DEFAULT_SETTINGS.defaultTarget 对齐）
+inline constexpr std::string_view kDefaultTranslateTarget = "zh-CN";
 
 }  // namespace nodebyte
 

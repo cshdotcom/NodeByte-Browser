@@ -411,5 +411,13 @@ INSERT INTO system_setting (setting_key, setting_value) VALUES
       "HomepageLocation": "https://www.bing.com"
     }
   }'::jsonb),
-  ('default_policy_sensitive_fields', '["CustomProxyVlessConfig","CustomDisableRendererSandbox"]'::jsonb)
+  ('default_policy_sensitive_fields', '["CustomProxyVlessConfig","CustomDisableRendererSandbox"]'::jsonb),
+  -- 翻译功能（用户需求：开源免费翻译 API）：默认开启 + 公共实例（管理员可覆盖为自托管）
+  ('translate_config', '{
+    "enabled": true,
+    "providers": [],
+    "cacheTtlHours": 168,
+    "auditLog": false,
+    "defaultTarget": "zh-CN"
+  }'::jsonb)
 ON CONFLICT (setting_key) DO NOTHING;

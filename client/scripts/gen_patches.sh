@@ -27,6 +27,7 @@ declare -A PATCH_GROUPS=(
   ["0150-nodebyte-webui"]="chrome/browser/ui/webui/nodebyte"
   ["0160-nodebyte-extensions"]="chrome/browser/nodebyte/extensions"
   ["0170-nodebyte-import"]="chrome/browser/nodebyte/import"
+  ["0180-nodebyte-translate"]="chrome/browser/nodebyte/translate"
 )
 
 mkdir -p "${OUT_DIR}"

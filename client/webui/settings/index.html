@@ -186,6 +186,46 @@ progress { width:100%; height:6px; }
   </div>
 </div>
 
+<h2><span class="badge">翻译</span> 开源免费翻译 API（多供应商自动降级）</h2>
+<div class="card">
+  <div class="f">
+    <label>翻译服务 / Translate provider</label>
+    <div class="row">
+      <select id="trProvider" style="width:220px">
+        <option value="auto">自动（按权重依次尝试）</option>
+        <option value="libretranslate">LibreTranslate（开源 AGPL）</option>
+        <option value="lingva">Lingva Translate（开源 GPL）</option>
+        <option value="mymemory">MyMemory（免费配额）</option>
+        <option value="deeplx">DeepLX（自托管 MIT）</option>
+      </select>
+      <button class="btn" id="btnTrOpen">打开翻译面板</button>
+      <button class="btn" id="btnTrPage">翻译当前页</button>
+    </div>
+    <p class="hint">
+      默认使用服务端聚合：LibreTranslate → Lingva → MyMemory → DeepLX 自动降级，无需付费 API Key。
+      管理员可在「后台 → 翻译配置」中切换自托管 LibreTranslate/DeepLX 实例或关闭功能（<code>NodeByteTranslateEnabled=false</code> 隐藏入口）。
+      「翻译当前页」会把当前网页正文发送到服务端翻译并替换显示（保留原页 DOM 结构，仅替换文本节点）。
+      单次上限 <code>NodeByteTranslateMaxChars</code>（默认 5000）。
+    </p>
+  </div>
+  <div class="f">
+    <label>目标语言 / Target language</label>
+    <select id="trTarget" style="width:220px">
+      <option value="zh-CN">简体中文</option>
+      <option value="zh-TW">繁體中文</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+      <option value="fr">Français</option>
+      <option value="de">Deutsch</option>
+      <option value="es">Español</option>
+      <option value="ru">Русский</option>
+      <option value="ar">العربية</option>
+    </select>
+    <p class="hint">策略 <code>NodeByteTranslateEnabled=false</code> 关闭翻译；<code>NodeByteTranslateAllowAnonymous=false</code> 要求登录后才能翻译。</p>
+  </div>
+</div>
+
 <script>
 // 数据来源：mojo nodebyte.mojom.NodeBytePolicy / NodeByteSync / NodeByteDrop
 // 演示逻辑：mandatory → 置灰；sensitiveFields → 隐藏明文；revoked → 删除本地强制配置
@@ -242,6 +282,24 @@ document.getElementById('btnCsvImport').addEventListener('click', () => {
   const out = document.getElementById('csvResult');
   if (!f) { out.innerHTML = '<p class="hint">请选择 CSV 文件</p>'; return; }
   out.innerHTML = `<p class="hint ok">已提交导入请求：${f.name}（${t}）→ 本机加密入库 → 按同步项勾选上传</p>`;
+});
+
+// 翻译：打开独立翻译面板（nodebyte://translate）
+document.getElementById('btnTrOpen').addEventListener('click', () => {
+  // 通过 Mojo 打开 nodebyte://translate WebUI（实际部署中由 ChromeContentBrowserClient 拦截）
+  window.location = 'nodebyte://translate';
+});
+
+// 翻译：翻译当前页（C++ TranslateController 调用，发起整页翻译）
+document.getElementById('btnTrPage').addEventListener('click', () => {
+  const tgt = document.getElementById('trTarget').value;
+  alert(`已发起整页翻译（目标语言：${tgt}）。\n\n` +
+    'C++ TranslateController 会：\n' +
+    '  1) 提取当前页可见文本节点；\n' +
+    '  2) 分批 POST /api/translate（每批 ≤ 5000 字符）；\n' +
+    '  3) 原地替换文本节点，保留 DOM 结构与样式；\n' +
+    '  4) 工具栏显示「已翻译 ✓ / 还原」按钮，点击还原原文。\n\n' +
+    '策略 NodeByteTranslateEnabled=false 时按钮置灰。');
 });
 </script>
 </body>

@@ -75,6 +75,11 @@ export const DIRECTIVE_REGISTRY: Record<string, DirectiveMeta> = {
   NodeByteOfflineGameEnabled: { label: '离线小游戏', valueType: 'switch', defaultValue: true },
   NodeByteAllowCustomSyncServer: { label: '允许修改同步服务器地址', valueType: 'switch', defaultValue: true },
 
+  // ---- 翻译（开源免费翻译 API）----
+  NodeByteTranslateEnabled: { label: '翻译功能（开源 API）', valueType: 'switch', defaultValue: true },
+  NodeByteTranslateAllowAnonymous: { label: '允许未登录用户翻译', valueType: 'switch', defaultValue: false },
+  NodeByteTranslateMaxChars: { label: '单次翻译字符上限', valueType: 'number', defaultValue: 5000 },
+
   // ---- 地址 / 文本类 ----
   HomepageLocation: { label: '主页地址', valueType: 'text', defaultValue: '' },
   NodeByteSyncServerOverride: { label: '同步服务器地址（下发覆盖）', valueType: 'text', defaultValue: '' },

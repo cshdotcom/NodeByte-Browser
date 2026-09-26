@@ -56,6 +56,11 @@ export const NODEBYTE_POLICY_DEFAULTS: Record<string, unknown> = {
   // 安卓端/桌面端是否允许用户修改同步服务器地址（默认允许，可被上游锁定）
   NodeByteAllowCustomSyncServer: true,
   NodeByteSyncServerFallback: '',             // 上游强制下发的主同步服务器（空 = 用户自由）
+
+  // ---- 翻译（开源免费翻译 API：LibreTranslate / Lingva / MyMemory / DeepLX）----
+  NodeByteTranslateEnabled: true,             // 翻译总开关（默认允许，可被上游拒绝）
+  NodeByteTranslateAllowAnonymous: false,     // 是否允许未登录用户使用（默认仅登录用户）
+  NodeByteTranslateMaxChars: 5000,            // 单次翻译字符上限
 };
 
 /** 把 NodeByte 默认值垫底合并进 mandatory（上游显式配置优先） */
@@ -106,5 +111,8 @@ export function summarizeForWeb(m: MergedPolicy): Record<string, unknown> {
     sidebarCustom: policyBool(m.mandatory, 'NodeByteSidebarCustomizationAllowed'),
     offlineGame: policyBool(m.mandatory, 'NodeByteOfflineGameEnabled'),
     allowCustomSyncServer: policyBool(m.mandatory, 'NodeByteAllowCustomSyncServer'),
+    translateEnabled: policyBool(m.mandatory, 'NodeByteTranslateEnabled'),
+    translateAllowAnonymous: policyBool(m.mandatory, 'NodeByteTranslateAllowAnonymous'),
+    translateMaxChars: policyNumber(m.mandatory, 'NodeByteTranslateMaxChars'),
   };
 }
