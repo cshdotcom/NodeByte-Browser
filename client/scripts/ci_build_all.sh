@@ -35,12 +35,27 @@ cd "${WORK}"
 
 # 1) depot_tools（首次 clone，后续增量）
 # 154 依赖 CIPD bootstrap：python3_bin_reldir.txt 缺失时 fetch 直接 exit 1
-if [ ! -d depot_tools ]; then
-  git clone --depth=1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
-fi
-export PATH="${WORK}/depot_tools:${PATH}"
-if [ ! -f depot_tools/python3_bin_reldir.txt ]; then
-  echo "==> bootstrap depot_tools ..."
+# 网络抖动自愈（v1.4.5 后补）：本轮 rc=1 真因——
+#   a) 初次 git clone 在 set -e 下无重试，clone 中途网络断 = 整个编译直接死；
+#   b) bootstrap 失败只重试 update_depot_tools，但 "bad object / did not send
+#      all necessary objects" 是本地 clone 对象库损坏，update 永远修不掉
+#      （depot_tools 自身提示 "Retry later or reclone depot_tools"）→ 必须删库重 clone。
+dt_ok=0
+for dtc in 1 2 3; do
+  if [ ! -d depot_tools/.git ]; then
+    echo "==> clone depot_tools（第 ${dtc}/3 轮）"
+    rm -rf depot_tools
+    if ! git clone --depth=1 https://chromium.googlesource.com/chromium/tools/depot_tools.git; then
+      echo "warn: depot_tools clone 第 ${dtc} 轮失败（googlesource 网络抖动），30s 后重试"
+      sleep 30
+      continue
+    fi
+  fi
+  export PATH="${WORK}/depot_tools:${PATH}"
+  if [ -f depot_tools/python3_bin_reldir.txt ]; then
+    dt_ok=1; break
+  fi
+  echo "==> bootstrap depot_tools（CIPD：python3_bin_reldir.txt）..."
   bt_ok=0
   for bt in 1 2 3 4 5; do
     if (cd depot_tools && ./update_depot_tools) && [ -f depot_tools/python3_bin_reldir.txt ]; then
@@ -49,8 +64,14 @@ if [ ! -f depot_tools/python3_bin_reldir.txt ]; then
     echo "warn: depot_tools bootstrap 第 ${bt} 次失败（googlesource 网络抖动），20s 后重试"
     sleep 20
   done
-  [ "${bt_ok}" = "1" ] || { echo "error: depot_tools bootstrap 5 次均失败" >&2; exit 1; }
-fi
+  if [ "${bt_ok}" = "1" ]; then
+    dt_ok=1; break
+  fi
+  echo "warn: bootstrap 5 次均失败 → 删除本地 depot_tools 重 clone（bad object 类损坏 update 修不掉，第 ${dtc}/3 轮）"
+  rm -rf depot_tools
+done
+[ "${dt_ok}" = "1" ] || { echo "error: depot_tools 3 轮 clone+bootstrap 均失败" >&2; exit 1; }
+echo "==> depot_tools 就绪（python3_bin_reldir.txt 在位）"
 
 # 2) 官方正式版 stable 源码（钉住版本，hook 0230/0240 基于 154 基线）：
 #    不用 `fetch chromium`（默认 trunk，基线漂移）；gclient config + sync -r 钉 tag；
