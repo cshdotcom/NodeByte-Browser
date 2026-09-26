@@ -69,7 +69,8 @@
 
 | 键 | 类型 | 执行点 |
 |---|---|---|
-| `AllowDropCollaboration` | bool | 多人协作文档整体关闭，仅保留多设备互通 |
+| `AllowDropCollaboration` | bool | 多人协作总开关（v1.4.5 服务端落地默认值 true + 指令通道可撤销）：协作会议/协作文档整体关闭，仅保留多设备互通 |
+| `NodeByteCollabMeetingPanelEnabled` | bool | 发起方管控面板（owner）显隐，默认 true（v1.4.5） |
 
 ## 用户组功能黑白名单（feature_policy 键，组配置合并进 Policy JSON）
 

@@ -8,7 +8,7 @@
 #define CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_LOGIN_UI_H_
 
 #include "chrome/browser/nodebyte/mojo/nodebyte.mojom.h"
-#include "content/public/browser/webui_controller.h"
+#include "content/public/browser/web_ui_controller.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 
 namespace content {

@@ -5,14 +5,16 @@
 #include "chrome/browser/nodebyte/nodebyte_constants.h"
 #include "grit/nodebyte_resources.h"
 #include "content/public/browser/web_ui.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_ui_data_source.h"
 
 namespace nodebyte {
 
-content::WebUIDataSource* CreateNodeBytePrintDataSource() {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-                                       std::string(kHostPrint));
+content::WebUIDataSource* CreateNodeBytePrintDataSource(
+    content::BrowserContext* browser_context) {
+  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      browser_context, std::string(kScheme) + "://" + std::string(kHostPrint));
   source->AddResourcePath("index.html", IDR_NODEBYTE_PRINT_INDEX);
   source->AddResourcePath("app.js", IDR_NODEBYTE_PRINT_APP);
   source->AddResourcePath("pdf-kit.js", IDR_NODEBYTE_PRINT_PDF_KIT);

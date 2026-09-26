@@ -69,6 +69,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: node server/scripts/office-print-selftest.mjs
 
+      - name: Collab & remote-command self-test (signaling/command whitelist/policy keys, v1.4.5)
+        working-directory: ${{ github.workspace }}
+        run: node server/scripts/collab-selftest.mjs
+
       - name: Upload standalone artifact
         uses: actions/upload-artifact@v4
         with:

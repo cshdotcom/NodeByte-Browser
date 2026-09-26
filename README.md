@@ -117,6 +117,7 @@ docker compose up -d            # PostgreSQL + RustFS + WS 信令 + NodeByte Ser
 | [docs/translate.md](docs/translate.md) | **翻译功能：18 种常用翻译 API 全矩阵 + 后台可视化配置 + 一键测试**（v1.4） |
 | [docs/upstream-services.md](docs/upstream-services.md) | **上游服务与可塑性：TTS/更新源/扩展代理后端化 + 同步服务器全接口自动跟随**（v1.4.2） |
 | [docs/office-print.md](docs/office-print.md) | **办公套件（MD/TXT/DOCX/PPTX/PDF 写作编辑 + WASM 按需加载）与高级打印面板（多页合一/小册子/pdf-kit 本地处理）**（v1.4.4） |
+| [docs/collab-remote.md](docs/collab-remote.md) | **协作会议（邀请/媒体审批/WebRTC P2P/管控）与远程指令（附录 E.1 白名单 8 种 + 后台设备面板）**（v1.4.5） |
 | [docs/build-client.md](docs/build-client.md) | 自托管 Runner 搭建与 Chromium 编译全流程 |
 | [docs/build-cnb.md](docs/build-cnb.md) | CNB 云原生构建（双平台策略：轻量校验默认跑/重编译手动触发）（v1.3） |
 | [docs/deploy-server.md](docs/deploy-server.md) | 服务端部署（All-in-One/compose、环境变量、S3 桶、反代） |

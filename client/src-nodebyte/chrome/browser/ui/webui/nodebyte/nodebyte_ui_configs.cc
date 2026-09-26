@@ -18,7 +18,7 @@
 #include "chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h"
 #include "chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h"
 #include "content/public/browser/web_ui.h"
-#include "content/public/browser/web_ui_config.h"
+#include "content/public/browser/webui_config.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "grit/nodebyte_resources.h"
@@ -29,9 +29,11 @@ namespace nodebyte {
 namespace {
 
 // ---- 通用数据源：按主机挂对应 grd 资源 ----
-content::WebUIDataSource* CreateSourceForHost(const std::string& host) {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(std::string(kScheme) + "::" + host);
+content::WebUIDataSource* CreateSourceForHost(
+    content::BrowserContext* browser_context, const std::string& host) {
+  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      browser_context, std::string(kScheme) + "://" + host);
   if (host == kHostSettings) {
     source->AddResourcePath("index.html", IDR_NODEBYTE_SETTINGS_INDEX);
   } else if (host == kHostTranslate) {
@@ -63,10 +65,7 @@ class GenericNodeByteConfig : public content::WebUIConfig {
 
   std::unique_ptr<content::WebUIController> CreateWebUIController(
       content::WebUI* web_ui, const GURL& url) override {
-    content::WebUIDataSource* source = CreateSourceForHost(host_);
-    if (source)
-      content::WebUIDataSource::Add(
-          Profile::FromWebUI(web_ui)->GetOriginalProfile(), source);
+    CreateSourceForHost(Profile::FromWebUI(web_ui)->GetOriginalProfile(), host_);
     return std::make_unique<GenericNodeByteUI>(web_ui);
   }
 
@@ -81,9 +80,7 @@ class NodeByteLoginConfig : public content::WebUIConfig {
 
   std::unique_ptr<content::WebUIController> CreateWebUIController(
       content::WebUI* web_ui, const GURL& url) override {
-    content::WebUIDataSource::Add(
-        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-        CreateNodeByteLoginDataSource());
+    CreateNodeByteLoginDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
     return std::make_unique<NodeByteLoginUI>(web_ui);
   }
 };
@@ -95,9 +92,7 @@ class NodeByteDropConfig : public content::WebUIConfig {
 
   std::unique_ptr<content::WebUIController> CreateWebUIController(
       content::WebUI* web_ui, const GURL& url) override {
-    content::WebUIDataSource::Add(
-        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-        CreateNodeByteDropDataSource());
+    CreateNodeByteDropDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
     return std::make_unique<NodeByteDropUI>(web_ui);
   }
 };
@@ -109,9 +104,7 @@ class NodeByteOfficeConfig : public content::WebUIConfig {
 
   std::unique_ptr<content::WebUIController> CreateWebUIController(
       content::WebUI* web_ui, const GURL& url) override {
-    content::WebUIDataSource::Add(
-        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-        CreateNodeByteOfficeDataSource());
+    CreateNodeByteOfficeDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
     return std::make_unique<NodeByteOfficeUI>(web_ui);
   }
 };
@@ -123,9 +116,7 @@ class NodeBytePrintConfig : public content::WebUIConfig {
 
   std::unique_ptr<content::WebUIController> CreateWebUIController(
       content::WebUI* web_ui, const GURL& url) override {
-    content::WebUIDataSource::Add(
-        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-        CreateNodeBytePrintDataSource());
+    CreateNodeBytePrintDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
     return std::make_unique<NodeBytePrintUI>(web_ui);
   }
 };
@@ -133,16 +124,17 @@ class NodeBytePrintConfig : public content::WebUIConfig {
 }  // namespace
 
 void RegisterNodeByteWebUIConfigs() {
-  content::WebUIConfigTable& table = content::GetWebUIConfigTable();
-  table.Add(std::make_unique<NodeByteLoginConfig>());
-  table.Add(std::make_unique<NodeByteDropConfig>());
-  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostSettings)));
-  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostTranslate)));
-  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostGame)));
-  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostUserCenter)));
-  table.Add(std::make_unique<NodeByteOfficeConfig>());
-  table.Add(std::make_unique<NodeBytePrintConfig>());
-  // scheme 早期注册（hook 0240 同时调用 RegisterNodeByteScheme()）
+  // 154 基线：注册入口为 WebUIConfigMap::AddWebUIConfig
+  // （chrome_web_ui_configs.cc 的 RegisterChromeWebUIConfigs() 由 hook 0240 调用本函数）
+  auto& map = content::WebUIConfigMap::GetInstance();
+  map.AddWebUIConfig(std::make_unique<NodeByteLoginConfig>());
+  map.AddWebUIConfig(std::make_unique<NodeByteDropConfig>());
+  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostSettings)));
+  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostTranslate)));
+  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostGame)));
+  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostUserCenter)));
+  map.AddWebUIConfig(std::make_unique<NodeByteOfficeConfig>());
+  map.AddWebUIConfig(std::make_unique<NodeBytePrintConfig>());
 }
 
 }  // namespace nodebyte

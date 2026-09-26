@@ -7,6 +7,71 @@
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-09-26
+
+### Added（协作会议 + 远程指令端到端落地；用户口径修正：「写作」实指「协作和远程」）
+
+- **背景**：v1.4.4 核查确认 Office 嵌入与打印已落地；用户澄清「写作」为口误，实际需求是
+  **协作会议**（5.9）与**远程指令**（附录 E.1）—— 核查确认两者此前仅服务端半套 + 客户端
+  mojom 空壳，本轮端到端补齐。
+- **服务端**：
+  - `/api/admin/devices`（设备列表：在线判定 90s + device_status 快照）与
+    `/api/admin/devices/command`（远程指令下发：**白名单 8 种** + payload 严格校验 +
+    `device_remote_command` 全量审计）；管理后台新增「设备与远程指令」面板
+    （设备搜索/状态快照/当前标签页/指纹模板 + 命令下拉 + payload JSON + 下发）；
+  - ws-service：`rtc_relay`（WebRTC SDP/ICE **会内中继**，双向校验会内成员 + 未被踢出）、
+    `collab_join`（owner 通知 + participant_update 广播）、`collab_leave`、
+    `input_event` **controller 角色服务端校验**（仅控制权持有者可注入事件）；
+  - 策略键落地：`AllowDropCollaboration`（多人协作总开关，默认 true，**入指令注册表可撤销**）+
+    `NodeByteCollabMeetingPanelEnabled`；创建会话走 `allow_collab_invite` 功能键校验。
+- **客户端（C++，低侵入铁律：业务在 JS，C++ 只暴露原子能力）**：
+  - mojom `NodeByteCollab` 一次性批量扩展 13 方法（GetSessions/GetParticipants/EndSession/
+    GetWsAuth/ExecuteRemoteCommand/GetDeviceStatus 等），Moderate 增审批四动作；
+  - 新增 `chrome/browser/nodebyte/collab/collab_controller.{h,cc}`（补丁组 **0250**）：
+    REST 会话管理代理、WS 建连材料（**ws_url 经 ApiBase() 动态推导**，可塑性铁律）、
+    远程指令白名单执行（open_url 二次校验 scheme / close_tab / clear_cache / logout /
+    lock_browser / switch_fingerprint / switch_proxy / enable_snapshot，白名单外拒绝）、
+    设备状态采集（活动标签页/打开列表经 BrowserList）；真实注入点按惯例标注【需核实】；
+  - `nodebyte_constants.h` 新增协作/远程常量（kApiPathCollabSessions、8 命令、
+    kCollabStatusReportSeconds=60、kCollabWsReconnectMaxMs=30s）。
+- **客户端（Drop WebUI，双端一致：Windows/安卓同一实现）**：
+  - 协作 tab 全功能：我发起/我参与双列表、邀请码加入/邀请链接复制、参与者列表（角色/静音/
+    摄像头标记）、owner 管控（静音/关摄像头/授予收回控制权/踢出/全体操作/结束会话）、
+    协作者媒体申请 + owner 审批弹层（approve/deny）；
+  - **WS 信令客户端**（本页 JS 持有连接，低侵入）：hello 鉴权 → 60s device_status 上报 →
+    指数退避重连（1s→30s）；`AllowDropCollaboration=false` 拒绝建连并提示；
+  - **WebRTC P2P**：RTCPeerConnection，SDP/ICE 经 rtc_relay；**media_permission 放行前
+    不向 PeerConnection 添加任何本地轨道**（服务端唯一权威，附录 E.2 要点）；
+  - 远程指令接收：S→C command → Mojo ExecuteRemoteCommand 白名单执行。
+- **自测与 CI**：`collab-selftest.mjs`（零依赖 **124 项**：命令白名单双侧对齐/payload 校验/
+  信令 15 消息/rtc_relay 会内校验/REST 9 管控动作/mojom 13 方法/WebUI 14 函数接线/
+  admin 面板/策略键）接入 CNB lite-validate + GitHub server-ci；回归 translate 86 /
+  upstream 30 / csv / office-print 46 全过；11 个 01xx/02xx 新增文件补丁干跑全过；
+- **Chromium 154 编译真实接线（v1.4.5 关键工程）**：
+  - 逐条核验全部 C++ include 与 API 对 **154.0.8037.57 官方 stable** 的存在性
+    （88 个 include 批量探针 + 关键签名逐一验证），修复 13 处 API 漂移：
+    `web_ui_config.h→webui_config.h`、`WebUIDataSource::Create/Add→CreateAndAdd`、
+    `BindingsPolicy::kMojo→kWebUIBindingsPolicySet`、`base::Value::Dict/List→DictValue/ListValue`、
+    `BrowserList→GlobalBrowserCollection/BrowserWindowInterface`、`browser_navigator→navigator/ 子目录`
+    （Navigate 需回调参数）、`BaseWindow::Minimize（ui/base/base_window.h）`等；
+  - 首次编译接线：新增 `chrome/browser/nodebyte/BUILD.gn`（mojom 目标 + source_set）与
+    `chrome/browser/ui/webui/nodebyte/BUILD.gn`（WebUI 控制器 source_set），
+    经 0230 hook（**154 真实基线 git diff 生成**）挂入 chrome 主目标 deps；
+  - **清除 5 个伪 diff hook 补丁**（0200/0210/0220/旧0230/旧0240 —— 无有效 hunk 头，
+    永远无法应用），换为 2 个真实基线补丁（干跑可应用验证通过）；
+    旧 hook 承诺的内核级策略执行点诚实降级为 ⏳ 二期（feature-checklist 同步）；
+  - **修复三个必然失败的编译缺陷**：ci_build_all.sh 缺 sync_webui.sh 调用（grd 资源
+    缺失 = 构建必败）、grd BUILD.gn 引用未定义 GN 变量 `build_flag_defines`、
+    translate_controller 调用从未声明的 NodeByteProtocol::PostTranslateRequest（链接必败）；
+  - ci_build_all.sh 三保险：PATCH_BEST_EFFORT=1（hook 漂移降级不炸编译）+ sync_webui
+    + 默认 args-hosted-pc.gn（关 ThinLTO 适配云机内存）。
+- **CNB 编译通道补全**：- **CNB 编译通道补全**：`.cnb.yml` 新增 `$` → `api_trigger` 流水线（与 web_trigger 同定义），
+  支持 `POST /{repo}/-/build/start`（event=api_trigger）**编程触发** Chromium 全量编译，
+  push 默认仍仅 lite-validate 不烧核时。
+- **文档**：docs/collab-remote.md（七节：能力矩阵/数据流/远程指令/客户端架构/服务端/自测/CNB）、
+  policy-dictionary 补 2 键、feature-checklist 5.9 更新（诚实标注 ⏳ 二期边界）、api-contract 补
+  设备与远程指令/rtc_relay 协议。
+
 ## [1.4.4] - 2026-09-26
 
 ### Added（办公套件 + 高级打印端到端落地 + nodebyte:// WebUI 注册缺口补齐）

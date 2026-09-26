@@ -1,23 +1,62 @@
-diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc
+diff --git a/chrome/browser/ui/webui/nodebyte/BUILD.gn b/chrome/browser/ui/webui/nodebyte/BUILD.gn
 new file mode 100644
-index 0000000..c4fe628
+index 0000000..c5b30ae
+--- /dev/null
++++ b/chrome/browser/ui/webui/nodebyte/BUILD.gn
+@@ -0,0 +1,30 @@
++# Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++#
++# nodebyte:// WebUI 控制器编译目标（v1.4.5 首次接线，Chromium 154 基线）：
++#   login / drop / office / print 四控制器 + 八主机统一注册（WebUIConfigMap）。
++# 资源（HTML/JS/CSS）由 //chrome/browser/resources/nodebyte:nodebyte_resources
++# grit 目标打包；页面源码经 client/scripts/sync_webui.sh 构建前同步。
++
++source_set("nodebyte_webui") {
++  sources = [
++    "nodebyte_drop_ui.cc",
++    "nodebyte_login_ui.cc",
++    "nodebyte_office_ui.cc",
++    "nodebyte_print_ui.cc",
++    "nodebyte_ui_configs.cc",
++  ]
++
++  public_deps = [
++    "//chrome/browser/nodebyte:nodebyte_mojom",
++    "//chrome/browser/resources/nodebyte:nodebyte_resources",
++  ]
++
++  deps = [
++    "//base",
++    "//chrome/browser/nodebyte",
++    "//content/public/browser",
++    "//content/public/common",
++    "//ui/base",
++    "//url",
++  ]
++}
+diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc
+new file mode 100755
+index 0000000..8a7931d
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,39 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +
 +#include "chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h"
 +
 +#include "chrome/browser/nodebyte/nodebyte_constants.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/common/bindings_policy.h"
 +#include "chrome/browser/nodebyte/nodebyte_protocol.h"
 +#include "content/public/browser/web_ui_data_source.h"
 +
 +namespace nodebyte {
 +
-+content::WebUIDataSource* CreateNodeByteDropDataSource() {
-+  content::WebUIDataSource* source =
-+      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-+                                       std::string(kHostDrop));
++content::WebUIDataSource* CreateNodeByteDropDataSource(
++    content::BrowserContext* browser_context) {
++  // 154 基线：Create+Add 合并为 CreateAndAdd；source_name = "scheme://host"
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      browser_context, std::string(kScheme) + "://" + std::string(kHostDrop));
 +  source->AddResourcePath("index.html", IDR_NODEBYTE_DROP_INDEX);
 +  source->AddResourcePath("app.js", IDR_NODEBYTE_DROP_APP);
 +  source->AddResourcePath("i18n.js", IDR_NODEBYTE_DROP_I18N);
@@ -27,7 +66,7 @@ index 0000000..c4fe628
 +
 +NodeByteDropUI::NodeByteDropUI(content::WebUI* web_ui)
 +    : content::WebUIController(web_ui) {
-+  web_ui->SetBindings(content::BindingsPolicy::kMojo);
++  web_ui->SetBindings(content::kWebUIBindingsPolicySet);  // 154 基线
 +  BindMojo();
 +}
 +
@@ -41,8 +80,8 @@ index 0000000..c4fe628
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h
-new file mode 100644
-index 0000000..5d5a7fa
+new file mode 100755
+index 0000000..e30bdae
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h
 @@ -0,0 +1,31 @@
@@ -54,7 +93,7 @@ index 0000000..5d5a7fa
 +#ifndef CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_DROP_UI_H_
 +#define CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_DROP_UI_H_
 +
-+#include "content/public/browser/webui_controller.h"
++#include "content/public/browser/web_ui_controller.h"
 +
 +namespace content {
 +class WebUIDataSource;
@@ -78,11 +117,11 @@ index 0000000..5d5a7fa
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_DROP_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.cc
-new file mode 100644
-index 0000000..98ecd42
+new file mode 100755
+index 0000000..7858b1b
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.cc
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,90 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +//
 +// 实现说明：WebUIController + WebUIDataSource（内嵌资源）+ Mojo（nodebyte.mojom）。
@@ -97,6 +136,8 @@ index 0000000..98ecd42
 +#include "chrome/browser/nodebyte/nodebyte_constants.h"
 +#include "chrome/browser/nodebyte/nodebyte_protocol.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/common/bindings_policy.h"
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/browser/web_ui_data_source.h"
 +
@@ -111,10 +152,11 @@ index 0000000..98ecd42
 +  };)";
 +}  // namespace
 +
-+content::WebUIDataSource* CreateNodeByteLoginDataSource() {
-+  content::WebUIDataSource* source =
-+      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-+                                       std::string(kHostLogin));
++content::WebUIDataSource* CreateNodeByteLoginDataSource(
++    content::BrowserContext* browser_context) {
++  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      browser_context, std::string(kScheme) + "://" + std::string(kHostLogin));
 +  // 页面资源来自独立 grd（components/nodebyte_resources/，资源隔离）
 +  source->AddResourcePath("index.html", IDR_NODEBYTE_LOGIN_INDEX);
 +  source->AddResourcePath("app.js", IDR_NODEBYTE_LOGIN_APP);
@@ -126,14 +168,10 @@ index 0000000..98ecd42
 +
 +NodeByteLoginUI::NodeByteLoginUI(content::WebUI* web_ui)
 +    : content::WebUIController(web_ui) {
-+  auto* profile = Profile::FromWebUI(web_ui);
-+  web_ui->SetBindings(content::BindingsPolicy::kMojo);
-+  receivers_.Add(this, mojo::PendingReceiver<mojom::NodeByteAccount>(
-+                           web_ui->GetWebContents()
-+                               ->GetBrowserContext()
-+                               .value()));
-+  // 数据源注册由 hook 0150 在 WebUIConfig 中完成（需核实 WebUIConfig 注册点）
-+  (void)profile;
++  // 154 基线：bindings 用 kWebUIBindingsPolicySet（含 mojo）。
++  // NodeByteAccount 的 interface broker 注册由 WebUIControllerInterfaceBinder
++  // 通道完成（【需核实】真实构建时的 broker 挂点），此处保持控制器最小化。
++  web_ui->SetBindings(content::kWebUIBindingsPolicySet);
 +}
 +
 +NodeByteLoginUI::~NodeByteLoginUI() = default;
@@ -175,8 +213,8 @@ index 0000000..98ecd42
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.h
-new file mode 100644
-index 0000000..46efd83
+new file mode 100755
+index 0000000..2a6224b
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.h
 @@ -0,0 +1,45 @@
@@ -190,7 +228,7 @@ index 0000000..46efd83
 +#define CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_LOGIN_UI_H_
 +
 +#include "chrome/browser/nodebyte/mojo/nodebyte.mojom.h"
-+#include "content/public/browser/webui_controller.h"
++#include "content/public/browser/web_ui_controller.h"
 +#include "mojo/public/cpp/bindings/receiver_set.h"
 +
 +namespace content {
@@ -226,11 +264,11 @@ index 0000000..46efd83
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_LOGIN_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.cc
-new file mode 100644
-index 0000000..d117ff3
+new file mode 100755
+index 0000000..05a9432
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.cc
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,37 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +
 +#include "chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h"
@@ -240,14 +278,16 @@ index 0000000..d117ff3
 +#include "chrome/browser/profiles/profile.h"
 +#include "grit/nodebyte_resources.h"
 +#include "content/public/browser/web_ui.h"
++#include "content/public/browser/browser_context.h"
 +#include "content/public/browser/web_ui_data_source.h"
 +
 +namespace nodebyte {
 +
-+content::WebUIDataSource* CreateNodeByteOfficeDataSource() {
-+  content::WebUIDataSource* source =
-+      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-+                                       std::string(kHostOffice));
++content::WebUIDataSource* CreateNodeByteOfficeDataSource(
++    content::BrowserContext* browser_context) {
++  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      browser_context, std::string(kScheme) + "://" + std::string(kHostOffice));
 +  source->AddResourcePath("index.html", IDR_NODEBYTE_OFFICE_INDEX);
 +  source->AddResourcePath("app.js", IDR_NODEBYTE_OFFICE_APP);
 +  source->AddString("productName", kProductName);
@@ -267,8 +307,8 @@ index 0000000..d117ff3
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h
-new file mode 100644
-index 0000000..29a0fce
+new file mode 100755
+index 0000000..c422073
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h
 @@ -0,0 +1,29 @@
@@ -281,7 +321,7 @@ index 0000000..29a0fce
 +#ifndef CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_OFFICE_UI_H_
 +#define CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_OFFICE_UI_H_
 +
-+#include "content/public/browser/webui_controller.h"
++#include "content/public/browser/web_ui_controller.h"
 +
 +namespace content {
 +class WebUIDataSource;
@@ -302,11 +342,11 @@ index 0000000..29a0fce
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_OFFICE_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.cc
-new file mode 100644
-index 0000000..525013a
+new file mode 100755
+index 0000000..886e73c
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.cc
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,32 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +
 +#include "chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h"
@@ -314,14 +354,16 @@ index 0000000..525013a
 +#include "chrome/browser/nodebyte/nodebyte_constants.h"
 +#include "grit/nodebyte_resources.h"
 +#include "content/public/browser/web_ui.h"
++#include "content/public/browser/browser_context.h"
 +#include "content/public/browser/web_ui_data_source.h"
 +
 +namespace nodebyte {
 +
-+content::WebUIDataSource* CreateNodeBytePrintDataSource() {
-+  content::WebUIDataSource* source =
-+      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-+                                       std::string(kHostPrint));
++content::WebUIDataSource* CreateNodeBytePrintDataSource(
++    content::BrowserContext* browser_context) {
++  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      browser_context, std::string(kScheme) + "://" + std::string(kHostPrint));
 +  source->AddResourcePath("index.html", IDR_NODEBYTE_PRINT_INDEX);
 +  source->AddResourcePath("app.js", IDR_NODEBYTE_PRINT_APP);
 +  source->AddResourcePath("pdf-kit.js", IDR_NODEBYTE_PRINT_PDF_KIT);
@@ -338,8 +380,8 @@ index 0000000..525013a
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h
-new file mode 100644
-index 0000000..7ee6080
+new file mode 100755
+index 0000000..bc60e56
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h
 @@ -0,0 +1,28 @@
@@ -352,7 +394,7 @@ index 0000000..7ee6080
 +#ifndef CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_PRINT_UI_H_
 +#define CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_PRINT_UI_H_
 +
-+#include "content/public/browser/webui_controller.h"
++#include "content/public/browser/web_ui_controller.h"
 +
 +namespace content {
 +class WebUIDataSource;
@@ -372,11 +414,11 @@ index 0000000..7ee6080
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_PRINT_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.cc
-new file mode 100644
-index 0000000..94cebcc
+new file mode 100755
+index 0000000..f97c9ab
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.cc
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,140 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +//
 +// nodebyte:// WebUI 统一注册实现。
@@ -397,7 +439,7 @@ index 0000000..94cebcc
 +#include "chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h"
 +#include "chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h"
 +#include "content/public/browser/web_ui.h"
-+#include "content/public/browser/web_ui_config.h"
++#include "content/public/browser/webui_config.h"
 +#include "content/public/browser/web_ui_controller.h"
 +#include "content/public/browser/web_ui_data_source.h"
 +#include "grit/nodebyte_resources.h"
@@ -408,9 +450,11 @@ index 0000000..94cebcc
 +namespace {
 +
 +// ---- 通用数据源：按主机挂对应 grd 资源 ----
-+content::WebUIDataSource* CreateSourceForHost(const std::string& host) {
-+  content::WebUIDataSource* source =
-+      content::WebUIDataSource::Create(std::string(kScheme) + "::" + host);
++content::WebUIDataSource* CreateSourceForHost(
++    content::BrowserContext* browser_context, const std::string& host) {
++  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      browser_context, std::string(kScheme) + "://" + host);
 +  if (host == kHostSettings) {
 +    source->AddResourcePath("index.html", IDR_NODEBYTE_SETTINGS_INDEX);
 +  } else if (host == kHostTranslate) {
@@ -442,10 +486,7 @@ index 0000000..94cebcc
 +
 +  std::unique_ptr<content::WebUIController> CreateWebUIController(
 +      content::WebUI* web_ui, const GURL& url) override {
-+    content::WebUIDataSource* source = CreateSourceForHost(host_);
-+    if (source)
-+      content::WebUIDataSource::Add(
-+          Profile::FromWebUI(web_ui)->GetOriginalProfile(), source);
++    CreateSourceForHost(Profile::FromWebUI(web_ui)->GetOriginalProfile(), host_);
 +    return std::make_unique<GenericNodeByteUI>(web_ui);
 +  }
 +
@@ -460,9 +501,7 @@ index 0000000..94cebcc
 +
 +  std::unique_ptr<content::WebUIController> CreateWebUIController(
 +      content::WebUI* web_ui, const GURL& url) override {
-+    content::WebUIDataSource::Add(
-+        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-+        CreateNodeByteLoginDataSource());
++    CreateNodeByteLoginDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
 +    return std::make_unique<NodeByteLoginUI>(web_ui);
 +  }
 +};
@@ -474,9 +513,7 @@ index 0000000..94cebcc
 +
 +  std::unique_ptr<content::WebUIController> CreateWebUIController(
 +      content::WebUI* web_ui, const GURL& url) override {
-+    content::WebUIDataSource::Add(
-+        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-+        CreateNodeByteDropDataSource());
++    CreateNodeByteDropDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
 +    return std::make_unique<NodeByteDropUI>(web_ui);
 +  }
 +};
@@ -488,9 +525,7 @@ index 0000000..94cebcc
 +
 +  std::unique_ptr<content::WebUIController> CreateWebUIController(
 +      content::WebUI* web_ui, const GURL& url) override {
-+    content::WebUIDataSource::Add(
-+        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-+        CreateNodeByteOfficeDataSource());
++    CreateNodeByteOfficeDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
 +    return std::make_unique<NodeByteOfficeUI>(web_ui);
 +  }
 +};
@@ -502,9 +537,7 @@ index 0000000..94cebcc
 +
 +  std::unique_ptr<content::WebUIController> CreateWebUIController(
 +      content::WebUI* web_ui, const GURL& url) override {
-+    content::WebUIDataSource::Add(
-+        Profile::FromWebUI(web_ui)->GetOriginalProfile(),
-+        CreateNodeBytePrintDataSource());
++    CreateNodeBytePrintDataSource(Profile::FromWebUI(web_ui)->GetOriginalProfile());
 +    return std::make_unique<NodeBytePrintUI>(web_ui);
 +  }
 +};
@@ -512,21 +545,22 @@ index 0000000..94cebcc
 +}  // namespace
 +
 +void RegisterNodeByteWebUIConfigs() {
-+  content::WebUIConfigTable& table = content::GetWebUIConfigTable();
-+  table.Add(std::make_unique<NodeByteLoginConfig>());
-+  table.Add(std::make_unique<NodeByteDropConfig>());
-+  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostSettings)));
-+  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostTranslate)));
-+  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostGame)));
-+  table.Add(std::make_unique<GenericNodeByteConfig>(std::string(kHostUserCenter)));
-+  table.Add(std::make_unique<NodeByteOfficeConfig>());
-+  table.Add(std::make_unique<NodeBytePrintConfig>());
-+  // scheme 早期注册（hook 0240 同时调用 RegisterNodeByteScheme()）
++  // 154 基线：注册入口为 WebUIConfigMap::AddWebUIConfig
++  // （chrome_web_ui_configs.cc 的 RegisterChromeWebUIConfigs() 由 hook 0240 调用本函数）
++  auto& map = content::WebUIConfigMap::GetInstance();
++  map.AddWebUIConfig(std::make_unique<NodeByteLoginConfig>());
++  map.AddWebUIConfig(std::make_unique<NodeByteDropConfig>());
++  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostSettings)));
++  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostTranslate)));
++  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostGame)));
++  map.AddWebUIConfig(std::make_unique<GenericNodeByteConfig>(std::string(kHostUserCenter)));
++  map.AddWebUIConfig(std::make_unique<NodeByteOfficeConfig>());
++  map.AddWebUIConfig(std::make_unique<NodeBytePrintConfig>());
 +}
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h
-new file mode 100644
+new file mode 100755
 index 0000000..8404d71
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h

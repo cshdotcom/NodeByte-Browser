@@ -1,9 +1,53 @@
-diff --git a/chrome/browser/nodebyte/nodebyte_constants.h b/chrome/browser/nodebyte/nodebyte_constants.h
+diff --git a/chrome/browser/nodebyte/BUILD.gn b/chrome/browser/nodebyte/BUILD.gn
 new file mode 100644
-index 0000000..b96a648
+index 0000000..4b478b1
+--- /dev/null
++++ b/chrome/browser/nodebyte/BUILD.gn
+@@ -0,0 +1,38 @@
++# Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++#
++# NodeByte 浏览器核心模块 gn 编译目标（v1.4.5 首次接线，Chromium 154 基线）。
++# 编译范围： branding / protocol / collab / office / print + mojom 生成。
++# 二期接入（【需核实】154 API 移植完成后再编译）：
++#   drop_side_panel_coordinator（views 常驻侧栏）、extension_installer、
++#   data_importer、cookie_session_store、fingerprint_profile、sync client/crypto、
++#   policy_extend（directive_applier / cloud_policy_provider）
++# —— 这些模块当前仅仓库内实现，不进本次编译目标（诚实标注，见 feature-checklist）。
++
++import("//mojo/public/tools/bindings/mojom.gni")
++
++# NodeByte Mojo 接口（nodebyte.mojom → C++ 绑定；v1.4.5 批量扩展 13 方法）
++mojom("nodebyte_mojom") {
++  sources = [ "mojo/nodebyte.mojom" ]
++  deps = [ "//mojo/public/mojom/base" ]
++}
++
++source_set("nodebyte") {
++  sources = [
++    "collab/collab_controller.cc",
++    "nodebyte_branding.cc",
++    "nodebyte_protocol.cc",
++    "office/office_controller.cc",
++    "print/print_panel.cc",
++  ]
++
++  public_deps = [ ":nodebyte_mojom" ]
++
++  deps = [
++    "//base",
++    "//content/public/browser",
++    "//mojo/public/cpp/bindings",
++    "//skia",
++    "//ui/base",
++    "//url",
++  ]
++}
+diff --git a/chrome/browser/nodebyte/nodebyte_constants.h b/chrome/browser/nodebyte/nodebyte_constants.h
+new file mode 100755
+index 0000000..71d75d6
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_constants.h
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,130 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +//
 +// NodeByte Browser 客户端常量定义。
@@ -111,11 +155,31 @@ index 0000000..b96a648
 +// 办公套件按需加载配置（后台下发，可塑性：跟随 ApiBase）
 +inline constexpr std::string_view kApiPathOfficeConfig = "/api/client/office-config";
 +
++// =====================================================================
++// 协作会议 + 远程指令（v1.4.5；客户端提示词 5.9 / 附录 E.1-E.2）
++// =====================================================================
++// 协作 REST 基路径（可塑性：运行时拼 ApiBase()，禁止写死主机）
++inline constexpr std::string_view kApiPathCollabSessions = "/api/collab/sessions";
++// WS 信令路径已有 kWsPathSignal = "/ws"（附录 D）；WebRTC SDP/ICE 经 rtc_relay 会内中继
++// 远程指令白名单（附录 E.1 S→C command；与 server /api/admin/devices/command 对齐）
++inline constexpr std::string_view kRemoteCmdOpenUrl = "open_url";
++inline constexpr std::string_view kRemoteCmdCloseTab = "close_tab";
++inline constexpr std::string_view kRemoteCmdClearCache = "clear_cache";
++inline constexpr std::string_view kRemoteCmdLogout = "logout";
++inline constexpr std::string_view kRemoteCmdLockBrowser = "lock_browser";
++inline constexpr std::string_view kRemoteCmdSwitchFingerprint = "switch_fingerprint";
++inline constexpr std::string_view kRemoteCmdSwitchProxy = "switch_proxy";
++inline constexpr std::string_view kRemoteCmdEnableSnapshot = "enable_snapshot";
++// 设备状态上报间隔（附录 E.1；Drop WebUI JS 定时经 WS 上报，C++ GetDeviceStatus 采集）
++inline constexpr int kCollabStatusReportSeconds = 60;
++// WS 断线重连上限退避（毫秒；指数退避 1s → 30s 封顶）
++inline constexpr int kCollabWsReconnectMaxMs = 30000;
++
 +}  // namespace nodebyte
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_CONSTANTS_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_protocol.h b/chrome/browser/nodebyte/nodebyte_protocol.h
-new file mode 100644
+new file mode 100755
 index 0000000..f0760a2
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_protocol.h
@@ -143,7 +207,7 @@ index 0000000..f0760a2
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_PROTOCOL_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_protocol.cc b/chrome/browser/nodebyte/nodebyte_protocol.cc
-new file mode 100644
+new file mode 100755
 index 0000000..df326ed
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_protocol.cc
@@ -182,7 +246,7 @@ index 0000000..df326ed
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/nodebyte_branding.h b/chrome/browser/nodebyte/nodebyte_branding.h
-new file mode 100644
+new file mode 100755
 index 0000000..4b560c4
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_branding.h
@@ -219,7 +283,7 @@ index 0000000..4b560c4
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_BRANDING_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_branding.cc b/chrome/browser/nodebyte/nodebyte_branding.cc
-new file mode 100644
+new file mode 100755
 index 0000000..e3bb366
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_branding.cc
@@ -256,11 +320,11 @@ index 0000000..e3bb366
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/mojo/nodebyte.mojom b/chrome/browser/nodebyte/mojo/nodebyte.mojom
-new file mode 100644
-index 0000000..d1cd43e
+new file mode 100755
+index 0000000..6880403
 --- /dev/null
 +++ b/chrome/browser/nodebyte/mojo/nodebyte.mojom
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,129 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +//
 +// NodeByte Mojo 接口定义（客户端提示词 附录F.1）。
@@ -350,19 +414,43 @@ index 0000000..d1cd43e
 +};
 +
 +// ---------------- NodeByteCollab：会话状态 / 媒体申请 / 输入注入 / 悬浮窗控制 ----------------
++// v1.4.5 端到端补齐：REST 会话管理 + WS 信令鉴权材料 + 远程指令执行 + 设备状态上报。
++// 业务逻辑（WS 连接、WebRTC P2P、UI 状态机）在 Drop WebUI JS 侧（低侵入铁律），
++// C++ 只暴露原子能力：REST 代理 / 命令分发 / 浏览器内部状态采集。
 +interface NodeByteCollab {
 +  CreateSession(int32 expire_hours, bool allow_multi, int32 max_participants)
-+      => (string session_id, string share_token);
++      => (int32 business_code, string session_id, string share_token, string share_url);
 +  JoinByToken(string token) => (int32 business_code, string session_id);
++  // 会话列表（我发起 / 我参与）——REST GET /api/collab/sessions 的 JSON 原样透传
++  GetSessions() => (int32 business_code, string owned_json, string joined_json);
++  // 会话详情 + 在线参与者（含头像名/角色/静音/摄像头/权限标记）
++  GetParticipants(string session_id) => (int32 business_code, string participants_json);
++  // 销毁会话（DELETE /api/collab/sessions/[id]，仅发起方）
++  EndSession(string session_id) => (int32 business_code);
 +
 +  // 协作者申请开麦/开摄像头：服务端不放行不得建立上传轨道（后端唯一权威）
 +  RequestAudioPublish(string session_id);
 +  RequestVideoPublish(string session_id);
 +
-+  // 发起方管控：允许/强制静音/关闭摄像头/收回控制权/踢出/全体操作
-+  Moderate(string session_id, string action, string participant_id);
++  // 发起方管控：mute/unmute/disable_camera/revoke_control/grant_control/kick/
++  //   mute_all/camera_all/end（PATCH /api/collab/sessions/[id] 白名单，服务端权威）
++  Moderate(string session_id, string action, string participant_id)
++      => (int32 business_code, string result_json);
 +
-+  // Windows 悬浮管控面板（原生 HWND Popup，非网页 div）：仅 owner 渲染
-+  ShowControlPanel(string session_id) => (bool supported);   // Android 返回 false（放 Drop 侧边栏）
++  // WS 信令建连材料（Drop WebUI JS 持有连接：hello/device_status/rtc_relay/input_event）
++  // ws_url 已按 ApiBase() 动态推导（策略指令 > 用户设置 > 编译默认，可塑性铁律）；
++  // collab_allowed=false（AllowDropCollaboration=false）时 WebUI 拒绝建连。
++  GetWsAuth() => (string ws_url, string jwt, string device_id, bool collab_allowed);
++
++  // 远程指令执行（附录 E.1 S→C command 的 8 种白名单动作，由管理员后台下发）；
++  // result_json 返回执行结果摘要（审计/回显用）
++  ExecuteRemoteCommand(string cmd, string payload_json) => (bool ok, string result_json);
++  // 设备状态采集（device_status 上报：activeTab / openTabs / proxy / fingerprintTemplateId）
++  GetDeviceStatus() => (string status_json);
++
++  // Windows 悬浮管控面板（原生 HWND Popup，非网页 div）：仅 owner 渲染。
++  // v1.4.5：桌面/安卓统一返回 supported 并打开 Drop 侧边栏协作 tab（管控面板在
++  // 侧边栏内渲染，跨平台一致）；原生 HWND 悬浮窗 + 桌面辅助 exe 列为二期。
++  ShowControlPanel(string session_id) => (bool supported);
 +  HideControlPanel();
 +};

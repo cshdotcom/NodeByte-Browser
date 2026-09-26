@@ -57,6 +57,10 @@ export const DIRECTIVE_REGISTRY: Record<string, DirectiveMeta> = {
   AllowUserUploadOwnExtension: { label: '允许用户上传自己的扩展到同步空间', valueType: 'switch', defaultValue: true },
   AllowUserUninstallForcedExt: { label: '允许卸载强制下发的扩展', valueType: 'switch', defaultValue: false },
 
+  // ---- 协作会议 ----
+  AllowDropCollaboration: { label: '多人协作总开关（协作会议/协作文档）', valueType: 'switch', defaultValue: true },
+  NodeByteCollabMeetingPanelEnabled: { label: '发起方管控面板（owner）', valueType: 'switch', defaultValue: true },
+
   // ---- NodeByte 功能开关（是否允许类，默认放行）----
   NodeByteDropEnabled: { label: 'Drop 侧边栏', valueType: 'switch', defaultValue: true },
   NodeByteDropBackupAllowed: { label: 'Drop 备份到同步服务器', valueType: 'switch', defaultValue: true },

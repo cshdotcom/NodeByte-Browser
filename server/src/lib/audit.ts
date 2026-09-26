@@ -15,7 +15,8 @@ export type AuditOp =
   | 'modify_group' | 'delete_group' | 'create_policy_set' | 'modify_policy_set' | 'delete_policy_set'
   | 'upload_extension_package' | 'assign_forced_extension' | 'remove_forced_extension'
   | 'import_data_to_users' | 'create_policy_directive' | 'revoke_policy_directive'
-  | 'modify_system_setting' | 'collab_moderation' | 'admin_login';
+  | 'modify_system_setting' | 'collab_moderation' | 'admin_login'
+  | 'device_list_viewed' | 'device_remote_command';
 
 export async function adminAudit(params: {
   adminUserId: string;

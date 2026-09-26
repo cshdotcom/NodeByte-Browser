@@ -19,7 +19,7 @@ EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git 空树哈希（固�
 
 # 分组定义：补丁名 → src-nodebyte 下相对目录（空格分隔）
 declare -A PATCH_GROUPS=(
-  ["0100-nodebyte-core"]="chrome/browser/nodebyte/nodebyte_constants.h chrome/browser/nodebyte/nodebyte_protocol.h chrome/browser/nodebyte/nodebyte_protocol.cc chrome/browser/nodebyte/nodebyte_branding.h chrome/browser/nodebyte/nodebyte_branding.cc chrome/browser/nodebyte/mojo"
+  ["0100-nodebyte-core"]="chrome/browser/nodebyte/BUILD.gn chrome/browser/nodebyte/nodebyte_constants.h chrome/browser/nodebyte/nodebyte_protocol.h chrome/browser/nodebyte/nodebyte_protocol.cc chrome/browser/nodebyte/nodebyte_branding.h chrome/browser/nodebyte/nodebyte_branding.cc chrome/browser/nodebyte/mojo"
   ["0110-nodebyte-policy"]="chrome/browser/nodebyte/policy_extend"
   ["0120-nodebyte-sync"]="chrome/browser/nodebyte/sync"
   ["0130-nodebyte-cookie-sessions"]="chrome/browser/nodebyte/cookie_sessions"
@@ -29,6 +29,7 @@ declare -A PATCH_GROUPS=(
   ["0170-nodebyte-import"]="chrome/browser/nodebyte/import"
   ["0180-nodebyte-translate"]="chrome/browser/nodebyte/translate"
   ["0190-nodebyte-office"]="chrome/browser/nodebyte/office chrome/browser/nodebyte/print chrome/browser/resources/nodebyte"
+  ["0250-nodebyte-collab"]="chrome/browser/nodebyte/collab"
 )
 
 mkdir -p "${OUT_DIR}"

@@ -1,0 +1,22 @@
+From: NodeByte Browser Authors <dev@nodebyte.cn>
+Subject: [PATCH 0230] Wire nodebyte sources into chrome/browser build (154 baseline)
+
+真实基线（154.0.8037.57）生成的有效补丁（v1.4.5 取代旧伪 diff）：
+chrome/browser/BUILD.gn 的 source_set("browser") deps 增加：
+  - //chrome/browser/nodebyte（核心模块：collab/office/print/protocol/branding + mojom）
+  - //chrome/browser/ui/webui/nodebyte（nodebyte:// WebUI 控制器）
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index f261c72..93e50ab 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -2232,6 +2232,9 @@ source_set("browser") {
+     "//chrome/browser/resource_coordinator",
+     "//chrome/browser/resource_coordinator:impl",
+     "//chrome/browser/resources/accessibility:resources",
++    # NodeByte: nodebyte 核心模块 + nodebyte:// WebUI 控制器（v1.4.5）
++    "//chrome/browser/nodebyte",
++    "//chrome/browser/ui/webui/nodebyte",
+     "//chrome/browser/safe_browsing:metrics_collector",
+     "//chrome/browser/safe_browsing:verdict_cache_manager_factory",
+     "//chrome/browser/search_engine_choice",

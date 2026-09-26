@@ -1,0 +1,38 @@
+# Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
+#
+# NodeByte 浏览器核心模块 gn 编译目标（v1.4.5 首次接线，Chromium 154 基线）。
+# 编译范围： branding / protocol / collab / office / print + mojom 生成。
+# 二期接入（【需核实】154 API 移植完成后再编译）：
+#   drop_side_panel_coordinator（views 常驻侧栏）、extension_installer、
+#   data_importer、cookie_session_store、fingerprint_profile、sync client/crypto、
+#   policy_extend（directive_applier / cloud_policy_provider）
+# —— 这些模块当前仅仓库内实现，不进本次编译目标（诚实标注，见 feature-checklist）。
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+# NodeByte Mojo 接口（nodebyte.mojom → C++ 绑定；v1.4.5 批量扩展 13 方法）
+mojom("nodebyte_mojom") {
+  sources = [ "mojo/nodebyte.mojom" ]
+  deps = [ "//mojo/public/mojom/base" ]
+}
+
+source_set("nodebyte") {
+  sources = [
+    "collab/collab_controller.cc",
+    "nodebyte_branding.cc",
+    "nodebyte_protocol.cc",
+    "office/office_controller.cc",
+    "print/print_panel.cc",
+  ]
+
+  public_deps = [ ":nodebyte_mojom" ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//mojo/public/cpp/bindings",
+    "//skia",
+    "//ui/base",
+    "//url",
+  ]
+}

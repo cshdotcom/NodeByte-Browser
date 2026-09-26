@@ -105,6 +105,26 @@ inline constexpr std::string_view kPolicyNodeBytePrintPanelEnabled =
 // 办公套件按需加载配置（后台下发，可塑性：跟随 ApiBase）
 inline constexpr std::string_view kApiPathOfficeConfig = "/api/client/office-config";
 
+// =====================================================================
+// 协作会议 + 远程指令（v1.4.5；客户端提示词 5.9 / 附录 E.1-E.2）
+// =====================================================================
+// 协作 REST 基路径（可塑性：运行时拼 ApiBase()，禁止写死主机）
+inline constexpr std::string_view kApiPathCollabSessions = "/api/collab/sessions";
+// WS 信令路径已有 kWsPathSignal = "/ws"（附录 D）；WebRTC SDP/ICE 经 rtc_relay 会内中继
+// 远程指令白名单（附录 E.1 S→C command；与 server /api/admin/devices/command 对齐）
+inline constexpr std::string_view kRemoteCmdOpenUrl = "open_url";
+inline constexpr std::string_view kRemoteCmdCloseTab = "close_tab";
+inline constexpr std::string_view kRemoteCmdClearCache = "clear_cache";
+inline constexpr std::string_view kRemoteCmdLogout = "logout";
+inline constexpr std::string_view kRemoteCmdLockBrowser = "lock_browser";
+inline constexpr std::string_view kRemoteCmdSwitchFingerprint = "switch_fingerprint";
+inline constexpr std::string_view kRemoteCmdSwitchProxy = "switch_proxy";
+inline constexpr std::string_view kRemoteCmdEnableSnapshot = "enable_snapshot";
+// 设备状态上报间隔（附录 E.1；Drop WebUI JS 定时经 WS 上报，C++ GetDeviceStatus 采集）
+inline constexpr int kCollabStatusReportSeconds = 60;
+// WS 断线重连上限退避（毫秒；指数退避 1s → 30s 封顶）
+inline constexpr int kCollabWsReconnectMaxMs = 30000;
+
 }  // namespace nodebyte
 
 #endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_CONSTANTS_H_

@@ -13,7 +13,6 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/prefs/pref_service.h"
 #include "build/build_config.h"
 #include "chrome/browser/nodebyte/nodebyte_constants.h"
 #include "chrome/browser/profiles/profile.h"

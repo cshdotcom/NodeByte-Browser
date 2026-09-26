@@ -1,0 +1,30 @@
+# Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
+#
+# nodebyte:// WebUI 控制器编译目标（v1.4.5 首次接线，Chromium 154 基线）：
+#   login / drop / office / print 四控制器 + 八主机统一注册（WebUIConfigMap）。
+# 资源（HTML/JS/CSS）由 //chrome/browser/resources/nodebyte:nodebyte_resources
+# grit 目标打包；页面源码经 client/scripts/sync_webui.sh 构建前同步。
+
+source_set("nodebyte_webui") {
+  sources = [
+    "nodebyte_drop_ui.cc",
+    "nodebyte_login_ui.cc",
+    "nodebyte_office_ui.cc",
+    "nodebyte_print_ui.cc",
+    "nodebyte_ui_configs.cc",
+  ]
+
+  public_deps = [
+    "//chrome/browser/nodebyte:nodebyte_mojom",
+    "//chrome/browser/resources/nodebyte:nodebyte_resources",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/browser/nodebyte",
+    "//content/public/browser",
+    "//content/public/common",
+    "//ui/base",
+    "//url",
+  ]
+}

@@ -3,15 +3,18 @@
 #include "chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h"
 
 #include "chrome/browser/nodebyte/nodebyte_constants.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/common/bindings_policy.h"
 #include "chrome/browser/nodebyte/nodebyte_protocol.h"
 #include "content/public/browser/web_ui_data_source.h"
 
 namespace nodebyte {
 
-content::WebUIDataSource* CreateNodeByteDropDataSource() {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-                                       std::string(kHostDrop));
+content::WebUIDataSource* CreateNodeByteDropDataSource(
+    content::BrowserContext* browser_context) {
+  // 154 基线：Create+Add 合并为 CreateAndAdd；source_name = "scheme://host"
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      browser_context, std::string(kScheme) + "://" + std::string(kHostDrop));
   source->AddResourcePath("index.html", IDR_NODEBYTE_DROP_INDEX);
   source->AddResourcePath("app.js", IDR_NODEBYTE_DROP_APP);
   source->AddResourcePath("i18n.js", IDR_NODEBYTE_DROP_I18N);
@@ -21,7 +24,7 @@ content::WebUIDataSource* CreateNodeByteDropDataSource() {
 
 NodeByteDropUI::NodeByteDropUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui) {
-  web_ui->SetBindings(content::BindingsPolicy::kMojo);
+  web_ui->SetBindings(content::kWebUIBindingsPolicySet);  // 154 基线
   BindMojo();
 }
 

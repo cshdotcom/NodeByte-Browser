@@ -59,10 +59,30 @@ main:
         - name: 办公套件与打印自检（配置/策略键/pdf-kit 行为级；零依赖；v1.4.4 新增）
           script:
             - node server/scripts/office-print-selftest.mjs
+        - name: 协作会议与远程指令自检（信令通道/命令白名单/策略键；零依赖；v1.4.5 新增）
+          script:
+            - node server/scripts/collab-selftest.mjs
 
   # 手动触发（CNB 网页 → 构建 → web_trigger）：Chromium 全量编译
   # 仅在确有产物需求时手动运行，避免烧核时。
   web_trigger:
+    - name: nodebyte-chromium-build
+      docker:
+        image: ubuntu:24.04
+      runner:
+        cpus: 16
+      stages:
+        - name: 预检（磁盘/内存不足立即失败，不进入长编译）
+          script:
+            - bash client/scripts/ci_precheck.sh
+        - name: 安装依赖 + depot_tools + 官方源码 + 补丁 + 编译
+          script:
+            - bash client/scripts/ci_build_all.sh
+
+# 全局事件（不区分分支）：api_trigger 供 CNB API POST /{repo}/-/build/start
+# （event=api_trigger）编程触发，与 web_trigger 同一构建定义（v1.4.5 新增）。
+$:
+  api_trigger:
     - name: nodebyte-chromium-build
       docker:
         image: ubuntu:24.04

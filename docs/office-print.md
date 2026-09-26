@@ -67,11 +67,12 @@ nodebyte://office（办公套件 WebUI）          nodebyte://print（高级打�
 - 已知边界（v1.4.4 如实标注）：加密 PDF 不支持（明确报错）；注释/表单域在重排时丢弃；
   罕见「二进制噪声伪造对象头」文件可能解析偏移（首见优先策略）。
 
-### 打印入口接管（hook 0240）
+### 打印入口（v1.4.5 状态）
 
-- `chrome/browser/ui/browser_commands.cc` 的 `Print(Browser*)` 在
-  `nodebyte::PrintPanelEnabled(profile)` 为真时改为打开 `nodebyte://print`
-  （策略/指令关闭即回退原生打印预览，**运行时可切换、无需重编译**）。
+- **入口**：地址栏直达 `nodebyte://print`（WebUI 注册，154 真实基线 hook 0240）。
+- **Ctrl+P 接管**（`browser_commands.cc` Print() 重定向 + `NodeBytePrintPanelEnabled`
+  策略门控）：**二期** —— 该 hook 依赖 `nodebyte::PrintPanelEnabled(profile)` 桥接函数
+  的内核挂点，v1.4.5 诚实降级不接线（详见 feature-checklist 5.11.2）。
 - 提示词要求的「Windows 完整替换原生弹窗」分两阶段：本版为入口接管 + 面板增强；
   原生弹窗深度替换（print_preview UI 层）标注为二期（需编译期核实，
   与提示词「二期工程量大」的诚实标注一致）。
@@ -103,7 +104,7 @@ WASM 地址 + 上限 + 保存。策略三键已入指令注册表（下发/撤�
 |---|---|
 | `0190-nodebyte-office.patch` | `office_controller.{h,cc}`（平台门控/策略/CanOpenExtension）、`print_panel.{h,cc}`（PrintPanelEnabled）、`resources/nodebyte/{nodebyte_resources.grd,BUILD.gn}`（独立 grd 全页资源） |
 | `0150-nodebyte-webui.patch`（再生） | 新增 `nodebyte_office_ui.{h,cc}`、`nodebyte_print_ui.{h,cc}`、**`nodebyte_ui_configs.{h,cc}`（统一注册件）** |
-| `0240-hooks-webui-register-print.patch` | hook：chrome_web_ui_configs.cc 注册挂接 + scheme 接入 + Print() 重定向（需核实标注） |
+| `0240-hooks-webui-register.patch` | hook（154 真实基线生成，v1.4.5）：chrome_web_ui_configs.cc 注册挂接 + nodebyte:// 标准 scheme 接入；Print() 重定向列为二期（policy_bridge 依赖未接线） |
 
 **注册缺口修复（重要）**：v1.4.3 复核发现 nodebyte:// 页面从未真正注册——
 0150 只有控制器类，`IDR_NODEBYTE_*` 引用的 grd 目标不存在（0230 引用了

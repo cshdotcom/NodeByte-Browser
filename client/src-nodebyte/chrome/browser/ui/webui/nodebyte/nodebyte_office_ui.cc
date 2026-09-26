@@ -7,14 +7,16 @@
 #include "chrome/browser/profiles/profile.h"
 #include "grit/nodebyte_resources.h"
 #include "content/public/browser/web_ui.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_ui_data_source.h"
 
 namespace nodebyte {
 
-content::WebUIDataSource* CreateNodeByteOfficeDataSource() {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-                                       std::string(kHostOffice));
+content::WebUIDataSource* CreateNodeByteOfficeDataSource(
+    content::BrowserContext* browser_context) {
+  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      browser_context, std::string(kScheme) + "://" + std::string(kHostOffice));
   source->AddResourcePath("index.html", IDR_NODEBYTE_OFFICE_INDEX);
   source->AddResourcePath("app.js", IDR_NODEBYTE_OFFICE_APP);
   source->AddString("productName", kProductName);

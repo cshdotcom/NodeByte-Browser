@@ -1,0 +1,50 @@
+From: NodeByte Browser Authors <dev@nodebyte.cn>
+Subject: [PATCH 0240] Register nodebyte:// WebUI configs + standard scheme (154 baseline)
+
+真实基线（154.0.8037.57）生成的有效补丁（v1.4.5 取代旧伪 diff）：
+1. chrome_web_ui_configs.cc：RegisterChromeWebUIConfigs() 内调用
+   nodebyte::RegisterNodeByteWebUIConfigs()（八主机统一注册）；
+2. chrome_content_client.cc：kChromeStandardURLSchemes 增加 nodebyte
+   标准 scheme（nodebyte:// 可规范化 host，WebUIConfig 按 scheme+host 挂接）。
+
+diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+index f949b9e..d960ab0 100644
+--- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals_ui.h"
+ #include "chrome/browser/ui/webui/chrome_finds_internals/chrome_finds_internals_ui.h"
+ #include "chrome/browser/ui/webui/chrome_urls/chrome_urls_ui.h"
++#include "chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h"  // NodeByte
+ #include "chrome/browser/ui/webui/commerce/commerce_internals_ui_config.h"
+ #include "chrome/browser/ui/webui/components/components_ui.h"
+ #include "chrome/browser/ui/webui/connectors_internals/connectors_internals_ui.h"
+@@ -250,6 +251,8 @@ void RegisterChromeWebUIConfigs() {
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+   auto& map = content::WebUIConfigMap::GetInstance();
++  // NodeByte: nodebyte://login /drop /settings /translate /game /usercenter /office /print
++  nodebyte::RegisterNodeByteWebUIConfigs();
+   map.AddWebUIConfig(std::make_unique<AccessibilityUIConfig>());
+   map.AddWebUIConfig(std::make_unique<AutofillInternalsUIConfig>());
+   map.AddWebUIConfig(std::make_unique<BluetoothInternalsUIConfig>());
+diff --git a/chrome/common/chrome_content_client.cc b/chrome/common/chrome_content_client.cc
+index a972831..2ae2807 100644
+--- a/chrome/common/chrome_content_client.cc
++++ b/chrome/common/chrome_content_client.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/common/chrome_content_client.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"  // NodeByte: kScheme
+ 
+ #include <stdint.h>
+ 
+@@ -194,6 +195,7 @@ static const char* const kChromeStandardURLSchemes[] = {
+         // BUILDFLAG(IS_CHROMEOS)
+     chrome::kChromeNativeScheme,        chrome::kChromeSearchScheme,
+     dom_distiller::kDomDistillerScheme,
++    nodebyte::kScheme.data(),  // NodeByte: nodebyte:// WebUI scheme
+ #if BUILDFLAG(IS_ANDROID)
+     content::kAndroidAppScheme,
+ #endif

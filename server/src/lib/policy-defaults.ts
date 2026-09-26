@@ -21,6 +21,10 @@ export const NODEBYTE_POLICY_DEFAULTS: Record<string, unknown> = {
   NodeByteOfficeCollabEnabled: true,
   NodeByteOfficeCollabMaxParticipants: 20,
 
+  // ---- 协作会议（提示词附录 A 原名 AllowDropCollaboration；v1.4.5 落地）----
+  // false = 多人协作整体关闭（协作会议 + 协作文档），仅保留多设备互通
+  AllowDropCollaboration: true,
+
   // ---- 在线版个人中心（Web，无协作/无监控）----
   NodeByteWebPersonalEnabled: true,
   // 检测到自家浏览器（NodeByte UA）时才显示「打开侧边栏 Drop」入口

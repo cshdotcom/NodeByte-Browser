@@ -30,7 +30,7 @@
 | 2 | 忘记密码跳网页（A/B 方式 + 48h 冷静期服务端控制） | ✅ | /api/auth/forgot-password（冷静期校验）+ /(web)/forgot-password 页 |
 | 3 | 2FA：40301 强制绑定、未绑定锁功能、RFC-6238 | ✅ | 服务端 2fa setup/enable/disable + policy2fa.ts 接口强校验；crypto.ts TOTP |
 | 4 | 多 Profile 原生隔离；未登录仅本地浏览 | ✅ | 原生 Profiles + 登录门控设计 |
-| 5 | Profile 策略管控（MultiProfile/Guest/Incognito） | ✅ | 策略键全集 + hook 0200 |
+| 5 | Profile 策略管控（MultiProfile/Guest/Incognito） | ✅ | 策略键全集（服务端下发 + WebUI 读取；内核 hook 二期） |
 | 6 | **一键登录绑定**（站点会话检测弹窗） | ⏳ | **v1.4.3 修正：未实现**（v1.3 旧表误标 ✅）。会话分享/绑定策略键与 Cookie 会话集已备，检测弹窗流程列入二期 |
 
 ### 5.2 同步客户端
@@ -49,11 +49,11 @@
 
 | # | 需求 | 状态 | 落点 |
 |---|---|---|---|
-| 1 | CloudOrgPolicyProvider 注入原生 PolicyService 最高优先级 | ✅ | `policy_extend/cloud_policy_provider.{h,cc}`（SimpleURLLoader 拉取 + JSON 解析）+ hook 0200 |
+| 1 | CloudOrgPolicyProvider 注入原生 PolicyService 最高优先级 | ⏳ | `policy_extend/cloud_policy_provider.{h,cc}` 已实现未编译进目标（154 移植二期）；客户端经 REST 轮询 + WS policy_update 即时生效（kPolicyPollMinutes） |
 | 2 | mandatory/recommended 两级（原生置灰） | ✅ | 同上 |
 | 3 | sensitiveFields UI 隐藏明文（明示 chrome://policy 可读） | ✅ | 设置 WebUI masked 控件（.masked + VLESS 示例）|
-| 4 | 细粒度执行点（沙箱/JS/WS/同源/CORS/黑白名单/打印等） | ✅ | hook 0210/0220 + 策略键全集（附录 A 37 键服务端齐备） |
-| 5 | 自定义策略键注册 policy_registry | 🟡 | hook 0200（基线接入需编译核实） |
+| 4 | 细粒度执行点（沙箱/JS/WS/同源/CORS/黑白名单/打印等） | ⏳ | 服务端策略键全集齐备并下发；blink/network 内核执行点 hook 二期（154 API 移植后接入） |
+| 5 | 自定义策略键注册 policy_registry | ⏳ | 二期（与 policy 服务端权威下发并行运作中） |
 | 6 | 策略指令下发/撤销（v1.3） | ✅ | 服务端 48 键注册表 + policy_directive 表 + 客户端 `directive_applier.{h,cc}`（撤销五语义） |
 
 ### 5.4 Drop 侧边栏
@@ -81,8 +81,8 @@
 
 | # | 需求 | 状态 | 落点 |
 |---|---|---|---|
-| 1 | 沙箱/JS/WS/WSS/同源/CORS/跨域 Cookie/存储配额/黑白名单 | ✅ | hook 0210/0220 + 服务端策略键全集（附录 A 37 键） |
-| 2 | 协作会议（邀请/媒体审批/输入注入/悬浮面板/SFU） | 🟡 | 服务端 collab 全套（媒体权限服务端权威）+ ws-service 信令 15 消息齐备；**Go SFU 转发器 ⏳**、客户端 WebRTC 媒体层 ⏳（提示词 5.9.9 自身标注第一版不做） |
+| 1 | 沙箱/JS/WS/WSS/同源/CORS/跨域 Cookie/存储配额/黑白名单 | 🟡 | 服务端策略键全集（附录 A 37 键）+ 策略指令通道 ✅；blink/network 内核 hook ⏳ 二期 |
+| 2 | 协作会议（邀请/媒体审批/输入注入/悬浮面板/SFU） | 🟡→✅（v1.4.5 端到端） | 服务端 collab 全套（媒体权限服务端权威）+ ws-service 信令（含 rtc_relay/collab_join/leave/controller 角色校验）+ 客户端 NodeByteCollab mojom 全方法 + collab_controller（0250）+ Drop WebUI 协作全功能（会话/邀请/审批/管控/WebRTC P2P）+ AllowDropCollaboration 策略落地；**Go SFU ⏳ / 输入注入 C++ ⏳ / HWND 悬浮面板 ⏳（桌面用侧边栏面板）/ 辅助 exe ⏳（见 docs/collab-remote.md 一）** |
 
 ### 5.10 扩展插件
 
@@ -100,11 +100,11 @@
 | # | 需求 | 状态 | 落点 |
 |---|---|---|---|
 | 1 | MD/DOCX/PPTX/PDF/TXT（WASM 编辑 + PPT 放映；Android 预览） | ✅ | **v1.4.4 nodebyte://office**：MD 完整编辑（标题/粗斜/列表/表格/图片/字号颜色）+ TXT 编码识别 + DOCX/PPTX 零依赖解析预览（DOM 构建，DecompressionStream 解压）+ PPT 放映/翻页/演讲者视图 + PDF 内核查看；Android 仅预览（NodeByteOfficeAndroidEdit 可放开）；LibreOffice WASM 完整引擎后台配置 wasmUrl **按需加载**（NodeByteWasmOffice.mount 约定） |
-| 2 | Windows 定制打印弹窗 / Android 打印增强 | ✅ | **v1.4.4 nodebyte://print**：前置面板（页码范围/缩放/边距/多页合一 1-16/小册子骑马钉）+ pdf-kit 本地 PDF 二次处理（Form XObject 原样搬运 + cm 变换链 + ObjStm 展开）→ 系统打印；hook 0240 Print() 入口接管（NodeBytePrintPanelEnabled 门控，关闭回原生）；原生弹窗深度替换标二期（与提示词诚实标注一致） |
-| 3 | 离线小游戏（NodeByte Runner，躲避+道具+最高分） | ✅ | webui/offline-game/game.js + hook 0230 替换 error_page 资源 + 策略键 |
+| 2 | Windows 定制打印弹窗 / Android 打印增强 | ✅ | **v1.4.4 nodebyte://print**：前置面板（页码范围/缩放/边距/多页合一 1-16/小册子骑马钉）+ pdf-kit 本地 PDF 二次处理（Form XObject 原样搬运 + cm 变换链 + ObjStm 展开）→ 系统打印；Ctrl+P 接管（Print() 重定向）二期诚实降级（policy_bridge 挂点未接线，见 docs/office-print.md）；入口 = 地址栏 nodebyte://print |
+| 3 | 离线小游戏（NodeByte Runner，躲避+道具+最高分） | ✅ | webui/offline-game/game.js + nodebyte://game WebUI 注册（error_page dino 替换 hook 移除，二期） + 策略键 |
 | 4 | Windows 八浏览器导入（书签/密码/历史/扩展列表） | ✅ | `import/data_importer.{h,cc}` + 原生 importer |
 | 5 | CSV 三类导入（本机 + 管理端 + 个人中心三通道） | ✅ | csv.ts（RFC-4180）+ imports.ts + admin/import + personal/import + sync/imported（表名 user_imported_*） |
-| 6 | nodebyte:// WebUI 注册层（v1.4.4 补缺口） | ✅ | nodebyte_ui_configs.{h,cc} 八主机统一注册（login/drop/settings/translate/game/usercenter/office/print）+ 独立 grd 资源包（0230 引用的 BUILD.gn 目标落地）+ login/drop i18n.js / translate app.js / usercenter 占位补齐 |
+| 6 | nodebyte:// WebUI 注册层（v1.4.4 补缺口） | ✅ | nodebyte_ui_configs.{h,cc} 八主机统一注册（login/drop/settings/translate/game/usercenter/office/print）+ 独立 grd 资源包 + **v1.4.5 编译接线**（ui/webui/nodebyte/BUILD.gn + chrome/browser/BUILD.gn hook，154 真实基线）+ login/drop i18n.js / translate app.js / usercenter 占位补齐 |
 
 ### 5.14 UI/多语言/开发模式 / 5.15 安装程序
 

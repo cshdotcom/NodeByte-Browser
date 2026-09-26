@@ -103,6 +103,13 @@
 **可塑性**：以上全部接口（连同策略/同步/Drop/翻译/WS）地址均由「当前同步服务器地址」动态推导，
 策略指令 > 用户设置 > 编译默认；切换后无需重启自动重连（docs/upstream-services.md 一）。
 
+## 2.x 设备与远程指令（v1.4.5，管理员）
+
+| 接口 | 方法 | 说明 |
+|---|---|---|
+| `/api/admin/devices` | GET | 设备列表（在线 = last_online_at 90s 内；含 last_status 快照） |
+| `/api/admin/devices/command` | POST | 远程指令下发：`{deviceId?, userEmail?, cmd, payload?}`；cmd 白名单 8 种（open_url/close_tab/clear_cache/logout/lock_browser/switch_fingerprint/switch_proxy/enable_snapshot）；payload 严格校验；审计 `device_remote_command`；**离线不重放**（持续语义用策略指令通道） |
+
 ## 3. WebSocket 信令协议（附录D）
 
 统一信封 `{ "type": "...", "seq": 1, "data": {...} }`；建连先发 `hello { deviceId, jwt }`。
@@ -120,6 +127,9 @@
 | C→S | request_audio_publish / request_video_publish | participantId | 转发 owner 审批 |
 | S→C | media_permission | participantId, allowAudio/allowVideo | 放行才建轨道 |
 | S→C | participant_update / control_grant / collab_ended | — | 广播状态 |
-| C→S | input_event | mouse/key | 仅转发 owner（注入 WebMouseEvent/WebKeyboardEvent） |
+| C→S | input_event | mouse/key | 仅转发 owner；**v1.4.5 起 controller 角色服务端校验** |
+| C→S | collab_leave | sessionId | participant_update 广播（v1.4.5） |
+| C→S | rtc_relay | sessionId, toUserId, payload(sdp/ice) | WebRTC SDP/ICE 会内中继；双向校验会内成员（v1.4.5） |
+| S→C | collab(kind=media_request/participant_joined/rtc/input_event) | — | 客户端 collab 事件统一信封（v1.4.5） |
 
 **权威边界**：媒体权限以数据库 `allow_send_audio/allow_send_video` 为唯一权威；即使协作者篡改本地，服务端不放行就拿不到推流权限。

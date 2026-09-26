@@ -57,6 +57,9 @@ CNB 免费核时有限，Chromium 编译建议优先自托管构建机（提示�
 ## 三、CNB 上手动触发 Chromium 编译
 
 1. CNB 网页 → 仓库 → 构建 → 选择 `nodebyte-chromium-build` → 运行；
+2. **编程触发（v1.4.5）**：`POST https://api.cnb.cool/{repo}/-/build/start`
+   （Bearer token，body `{"event":"api_trigger"}`）→ 返回 sn →
+   `GET /-/build/status/{sn}` 轮询；
 2. 观察 precheck 输出，规格不足先扩容或改自托管；
 3. 产物（chrome / chrome.exe / NodeByteBrowser.apk）在 stages 产物区下载，
    后续接入 `package_windows.sh` / `package_linux.sh` 打包安装器。

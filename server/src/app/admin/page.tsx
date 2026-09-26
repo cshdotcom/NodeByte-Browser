@@ -15,7 +15,7 @@ type Stats = {
 
 function Shell() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'translate' | 'upstream' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'translate' | 'upstream' | 'files' | 'ext' | 'audit' | 'settings' | 'devices'>('stats');
   const [me, setMe] = useState<{ username: string; isAdmin: boolean } | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ function Shell() {
       <div className="container">
         <div className="tabs">
           {([['stats', t('overview')], ['users', t('users')], ['groups', t('groups')], ['policy', t('policy')],
-             ['directives', t('directives')], ['import', t('importCenter')], ['translate', t('translate')], ['upstream', t('upstream')],
+             ['directives', t('directives')], ['import', t('importCenter')], ['translate', t('translate')], ['upstream', t('upstream')], ['devices', t('devicesRemote')],
              ['files', t('files')], ['ext', t('extensions')], ['audit', t('audit')], ['settings', t('settings')]] as const).map(([k, label]) => (
             <div key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{label}</div>
           ))}
@@ -54,6 +54,7 @@ function Shell() {
         {tab === 'import' && <ImportPanel />}
         {tab === 'translate' && <TranslatePanel />}
         {tab === 'upstream' && <UpstreamPanel />}
+        {tab === 'devices' && <DevicesPanel />}
         {tab === 'files' && <FilesPanel />}
         {tab === 'ext' && <ExtPanel />}
         {tab === 'audit' && <AuditPanel />}
@@ -1494,6 +1495,109 @@ function CreateDirective({ onClose, onDone }: { onClose: () => void; onDone: () 
         </form>
       </div>
     </div>
+  );
+}
+
+
+/* ============ 设备与远程指令（v1.4.5；附录 E.1 S→C command 白名单 8 种） ============ */
+
+type DeviceRow = {
+  device_id: string; device_name: string | null; username: string; email: string;
+  online: boolean; is_revoked: boolean; last_online_at: string | null;
+  last_status: { activeTab?: { url?: string; title?: string }; openTabs?: string[]; proxy?: Record<string, unknown>; fingerprintTemplateId?: string };
+};
+
+const REMOTE_COMMANDS: Array<[string, string, string]> = [
+  ['open_url', '打开网页', 'url（https://…）'],
+  ['close_tab', '关闭当前标签页', ''],
+  ['clear_cache', '清缓存', ''],
+  ['logout', '退出 NodeByte 账号', ''],
+  ['lock_browser', '锁定浏览器', ''],
+  ['switch_fingerprint', '切换指纹模板', 'templateId'],
+  ['switch_proxy', '切换代理', '{"mode":"fixed_servers","server":"…"}'],
+  ['enable_snapshot', '网页快照预览', 'url（可选）']
+];
+
+function DevicesPanel() {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<DeviceRow[]>([]);
+  const [sel, setSel] = useState<DeviceRow | null>(null);
+  const [cmd, setCmd] = useState('open_url');
+  const [payload, setPayload] = useState('');
+  const [msg, setMsg] = useState('');
+  const [q, setQ] = useState('');
+
+  const load = useCallback(() => {
+    api<{ devices: DeviceRow[] }>('/api/admin/devices', { headers: bearerHeaders() })
+      .then((r) => r.code === 0 && setRows(r.data.devices || []));
+  }, []);
+  useEffect(load, [load]);
+
+  const filtered = rows.filter((r) => !q || (r.email + ' ' + (r.device_name ?? '')).toLowerCase().includes(q.toLowerCase()));
+
+  const send = async () => {
+    if (!sel) return;
+    let parsed: Record<string, unknown> = {};
+    if (payload.trim()) {
+      try { parsed = JSON.parse(payload); } catch { setMsg('payload 必须是合法 JSON'); return; }
+    }
+    const r = await api<{ sent: boolean }>('/api/admin/devices/command', {
+      method: 'POST', headers: bearerHeaders(),
+      body: JSON.stringify({ deviceId: sel.device_id, cmd, payload: parsed })
+    });
+    setMsg(`${r.message}${r.code === 0 ? ' → ' + sel.email : ''}`);
+  };
+
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title">设备列表（在线优先 · device_status 快照）</div>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <input className="input" placeholder="搜索邮箱 / 设备名" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 240 }} />
+          <button className="btn btn-ghost btn-sm" onClick={load}>刷新 Refresh</button>
+        </div>
+        <div className="table-wrap"><table className="tbl">
+          <thead><tr><th>状态</th><th>用户</th><th>设备</th><th>当前标签页</th><th>指纹</th><th>最后在线</th></tr></thead>
+          <tbody>{filtered.map((d) => (
+            <tr key={d.device_id} onClick={() => { setSel(d); setMsg(''); }} style={{ cursor: 'pointer', background: sel?.device_id === d.device_id ? 'rgba(91,139,255,.12)' : undefined }}>
+              <td>{d.is_revoked ? <span className="badge badge-dim">已吊销</span> : d.online ? <span className="badge">在线</span> : <span className="badge badge-dim">离线</span>}</td>
+              <td>{d.username}<div className="hint">{d.email}</div></td>
+              <td>{d.device_name ?? '-'}</td>
+              <td className="mono">{d.last_status?.activeTab?.url?.slice(0, 48) ?? '-'}</td>
+              <td>{d.last_status?.fingerprintTemplateId || '-'}</td>
+              <td>{d.last_online_at ? fmtTime(d.last_online_at) : '-'}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">远程指令下发（附录 E.1 · 白名单 8 种 · 全量审计）</div>
+        <p className="hint" style={{ marginBottom: 8 }}>
+          指令经 ws-service 实时推送到客户端（S→C command）；离线设备<b>不会重放</b>。
+          客户端白名单执行后回执结果。高危动作（logout / lock_browser）建议先确认设备归属。
+        </p>
+        {!sel ? <p className="hint">先在上方表格中选择一台设备。</p> : (
+          <>
+            <div className="row" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+              <span className="badge">{sel.email}</span>
+              <span className="hint">{sel.device_name ?? sel.device_id.slice(0, 8)}</span>
+              {!sel.online && <span className="hint">（当前离线，指令将不会送达）</span>}
+            </div>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <select className="input" style={{ maxWidth: 220 }} value={cmd} onChange={(e) => setCmd(e.target.value)}>
+                {REMOTE_COMMANDS.map(([k, label]) => <option key={k} value={k}>{label}（{k}）</option>)}
+              </select>
+              <input className="input mono" style={{ flex: 1, minWidth: 220 }} placeholder='payload JSON，如 {"url":"https://example.com"}'
+                     value={payload} onChange={(e) => setPayload(e.target.value)} />
+              <button className="btn btn-primary" onClick={send}>下发指令</button>
+            </div>
+            <p className="hint" style={{ marginTop: 6 }}>参数提示：{REMOTE_COMMANDS.find((c) => c[0] === cmd)?.[2] || '无参数'}</p>
+          </>
+        )}
+        {msg && <p className="hint" style={{ marginTop: 8 }}>{msg}</p>}
+      </div>
+    </>
   );
 }
 

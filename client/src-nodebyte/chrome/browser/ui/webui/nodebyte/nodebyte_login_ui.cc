@@ -12,6 +12,8 @@
 #include "chrome/browser/nodebyte/nodebyte_constants.h"
 #include "chrome/browser/nodebyte/nodebyte_protocol.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/common/bindings_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
 
@@ -26,10 +28,11 @@ constexpr char kStringsJs[] = R"(
   };)";
 }  // namespace
 
-content::WebUIDataSource* CreateNodeByteLoginDataSource() {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(std::string(kScheme) + "::" +
-                                       std::string(kHostLogin));
+content::WebUIDataSource* CreateNodeByteLoginDataSource(
+    content::BrowserContext* browser_context) {
+  // 154 基线：CreateAndAdd（source_name = "scheme://host"）
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      browser_context, std::string(kScheme) + "://" + std::string(kHostLogin));
   // 页面资源来自独立 grd（components/nodebyte_resources/，资源隔离）
   source->AddResourcePath("index.html", IDR_NODEBYTE_LOGIN_INDEX);
   source->AddResourcePath("app.js", IDR_NODEBYTE_LOGIN_APP);
@@ -41,14 +44,10 @@ content::WebUIDataSource* CreateNodeByteLoginDataSource() {
 
 NodeByteLoginUI::NodeByteLoginUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui) {
-  auto* profile = Profile::FromWebUI(web_ui);
-  web_ui->SetBindings(content::BindingsPolicy::kMojo);
-  receivers_.Add(this, mojo::PendingReceiver<mojom::NodeByteAccount>(
-                           web_ui->GetWebContents()
-                               ->GetBrowserContext()
-                               .value()));
-  // 数据源注册由 hook 0150 在 WebUIConfig 中完成（需核实 WebUIConfig 注册点）
-  (void)profile;
+  // 154 基线：bindings 用 kWebUIBindingsPolicySet（含 mojo）。
+  // NodeByteAccount 的 interface broker 注册由 WebUIControllerInterfaceBinder
+  // 通道完成（【需核实】真实构建时的 broker 挂点），此处保持控制器最小化。
+  web_ui->SetBindings(content::kWebUIBindingsPolicySet);
 }
 
 NodeByteLoginUI::~NodeByteLoginUI() = default;

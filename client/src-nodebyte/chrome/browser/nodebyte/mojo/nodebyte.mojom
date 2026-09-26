@@ -87,19 +87,43 @@ interface NodeBytePolicy {
 };
 
 // ---------------- NodeByteCollab：会话状态 / 媒体申请 / 输入注入 / 悬浮窗控制 ----------------
+// v1.4.5 端到端补齐：REST 会话管理 + WS 信令鉴权材料 + 远程指令执行 + 设备状态上报。
+// 业务逻辑（WS 连接、WebRTC P2P、UI 状态机）在 Drop WebUI JS 侧（低侵入铁律），
+// C++ 只暴露原子能力：REST 代理 / 命令分发 / 浏览器内部状态采集。
 interface NodeByteCollab {
   CreateSession(int32 expire_hours, bool allow_multi, int32 max_participants)
-      => (string session_id, string share_token);
+      => (int32 business_code, string session_id, string share_token, string share_url);
   JoinByToken(string token) => (int32 business_code, string session_id);
+  // 会话列表（我发起 / 我参与）——REST GET /api/collab/sessions 的 JSON 原样透传
+  GetSessions() => (int32 business_code, string owned_json, string joined_json);
+  // 会话详情 + 在线参与者（含头像名/角色/静音/摄像头/权限标记）
+  GetParticipants(string session_id) => (int32 business_code, string participants_json);
+  // 销毁会话（DELETE /api/collab/sessions/[id]，仅发起方）
+  EndSession(string session_id) => (int32 business_code);
 
   // 协作者申请开麦/开摄像头：服务端不放行不得建立上传轨道（后端唯一权威）
   RequestAudioPublish(string session_id);
   RequestVideoPublish(string session_id);
 
-  // 发起方管控：允许/强制静音/关闭摄像头/收回控制权/踢出/全体操作
-  Moderate(string session_id, string action, string participant_id);
+  // 发起方管控：mute/unmute/disable_camera/revoke_control/grant_control/kick/
+  //   mute_all/camera_all/end（PATCH /api/collab/sessions/[id] 白名单，服务端权威）
+  Moderate(string session_id, string action, string participant_id)
+      => (int32 business_code, string result_json);
 
-  // Windows 悬浮管控面板（原生 HWND Popup，非网页 div）：仅 owner 渲染
-  ShowControlPanel(string session_id) => (bool supported);   // Android 返回 false（放 Drop 侧边栏）
+  // WS 信令建连材料（Drop WebUI JS 持有连接：hello/device_status/rtc_relay/input_event）
+  // ws_url 已按 ApiBase() 动态推导（策略指令 > 用户设置 > 编译默认，可塑性铁律）；
+  // collab_allowed=false（AllowDropCollaboration=false）时 WebUI 拒绝建连。
+  GetWsAuth() => (string ws_url, string jwt, string device_id, bool collab_allowed);
+
+  // 远程指令执行（附录 E.1 S→C command 的 8 种白名单动作，由管理员后台下发）；
+  // result_json 返回执行结果摘要（审计/回显用）
+  ExecuteRemoteCommand(string cmd, string payload_json) => (bool ok, string result_json);
+  // 设备状态采集（device_status 上报：activeTab / openTabs / proxy / fingerprintTemplateId）
+  GetDeviceStatus() => (string status_json);
+
+  // Windows 悬浮管控面板（原生 HWND Popup，非网页 div）：仅 owner 渲染。
+  // v1.4.5：桌面/安卓统一返回 supported 并打开 Drop 侧边栏协作 tab（管控面板在
+  // 侧边栏内渲染，跨平台一致）；原生 HWND 悬浮窗 + 桌面辅助 exe 列为二期。
+  ShowControlPanel(string session_id) => (bool supported);
   HideControlPanel();
 };

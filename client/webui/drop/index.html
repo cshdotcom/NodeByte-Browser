@@ -43,14 +43,50 @@
     <button id="btnNewSess" data-i18n="newSess">新建会话集</button>
   </main>
 
-  <!-- 协作 -->
+  <!-- 协作（5.9 / 附录 E.2：会话列表 + 邀请 + 媒体申请审批 + 管控 + WebRTC） -->
   <main id="panel-collab" class="panel">
     <div class="quick">
       <button id="btnCollabCreate" data-i18n="startCollab">发起协作会话</button>
+      <button id="btnCollabJoin" data-i18n="joinCollab">邀请码加入</button>
+      <button id="btnCollabRefresh" data-i18n="refreshCollab">刷新</button>
     </div>
-    <div class="muted" data-i18n="collabHint">有效期链接 · 邮箱批量邀请 · 媒体申请由发起方审批</div>
-    <ul class="list" id="collabList"></ul>
+    <div class="muted" id="collabHint">有效期链接 · 邮箱批量邀请 · 媒体申请由发起方审批 · 服务端不放行不建立轨道</div>
+    <div id="wsState" class="badge">WS 未连接</div>
+
+    <section class="collab-section">
+      <h4 data-i18n="ownedSessions">我发起的会话</h4>
+      <ul class="list" id="collabOwned"></ul>
+    </section>
+    <section class="collab-section">
+      <h4 data-i18n="joinedSessions">我参与的会话</h4>
+      <ul class="list" id="collabJoined"></ul>
+    </section>
+
+    <!-- 会话详情：参与者 + 管控（owner）/ 媒体申请（协作者）+ WebRTC -->
+    <section class="collab-section" id="collabDetail" hidden>
+      <h4 id="collabDetailTitle">会话</h4>
+      <div id="mediaRow" class="quick">
+        <button id="btnReqAudio" data-i18n="reqAudio">申请开麦</button>
+        <button id="btnReqVideo" data-i18n="reqVideo">申请开摄像头</button>
+        <span id="myPerm" class="muted"></span>
+      </div>
+      <ul class="list" id="participantList"></ul>
+      <div class="quick" id="ownerRow" hidden>
+        <button id="btnMuteAll" data-i18n="muteAll">全体静音</button>
+        <button id="btnCameraAll" data-i18n="cameraAll">全体关闭摄像头</button>
+        <button id="btnEndSession" class="danger" data-i18n="endSession">结束会话</button>
+      </div>
+      <video id="remoteVideo" autoplay playsinline muted></video>
+      <div class="muted" id="rtcState"></div>
+    </section>
+
+    <!-- 审批弹层（owner）：media_request 到达时展示 -->
+    <section class="collab-section" id="approvalBox" hidden>
+      <h4 data-i18n="pendingApprovals">待审批的媒体申请</h4>
+      <ul class="list" id="approvalList"></ul>
+    </section>
   </main>
+
 </div>
 <script src="app.js"></script>
 </body>

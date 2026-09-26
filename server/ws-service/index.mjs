@@ -8,8 +8,10 @@
  *   S→C push_message     { pushType, payload, msgId }     Drop 推送（tab_page/session_context/collab_invite/notice/text）
  *   S→C session_revoked  { sharedSessionId }
  *   S→C policy_update    { policyVersion }
- *   C→S collab_create / collab_join / request_audio_publish / request_video_publish / request_control / input_event
- *   S→C media_permission / participant_update / control_grant / collab_ended
+ *   C→S collab_create / collab_join / collab_leave / request_audio_publish / request_video_publish /
+ *       request_control / input_event / rtc_relay（WebRTC SDP/ICE 会内中继，v1.4.5）
+ *   S→C media_permission / participant_update / control_grant / collab_ended /
+ *       collab{kind:rtc|participant_joined|media_request|input_event}
  *
  * 服务间事件：POST /internal/emit（Bearer INTERNAL_SHARED_SECRET）由 Next.js 调用。
  * 生产环境大规模长连接建议以 Go 重写本服务（协议契约不变）。
@@ -111,6 +113,71 @@ wss.on('connection', (ws, req) => {
         send(ws, 'ack', { of: 'collab_create', hint: 'use REST /api/collab/sessions' });
         break;
       }
+      case 'collab_join': {
+        // 加入通知：告知 owner 新成员到达 + 向会内广播最新参与者列表（v1.4.5）
+        try {
+          const s = await pool.query(
+            `SELECT owner_user_id FROM collab_session WHERE session_id = $1 AND is_active = true`,
+            [data.sessionId]);
+          if (!s.rows[0]) { send(ws, 'error', { reason: 'session not found or ended' }); break; }
+          sendToUser(s.rows[0].owner_user_id, 'collab', {
+            kind: 'participant_joined', sessionId: data.sessionId, userId: ws.userId, from: ws.deviceId
+          });
+          const ps = await pool.query(
+            `SELECT p.participant_id, p.user_id, p.role, p.is_muted, p.allow_send_audio, p.allow_send_video
+               FROM collab_participant p
+              WHERE p.session_id = $1 AND p.leave_at IS NULL AND NOT p.is_kicked`,
+            [data.sessionId]);
+          const userIds = new Set([s.rows[0].owner_user_id, ...ps.rows.map((r) => r.user_id)]);
+          for (const uid of userIds) sendToUser(uid, 'collab', {
+            kind: 'participant_update', sessionId: data.sessionId, participants: ps.rows
+          });
+        } catch { /* DB 不可用时仅跳过广播，REST 仍可兜底拉取 */ }
+        send(ws, 'ack', { of: 'collab_join' });
+        break;
+      }
+      case 'collab_leave': {
+        // 离开通知：向 owner + 会内广播最新参与者列表（v1.4.5）
+        try {
+          const s = await pool.query(`SELECT owner_user_id FROM collab_session WHERE session_id = $1`, [data.sessionId]);
+          if (s.rows[0]) {
+            const ps = await pool.query(
+              `SELECT participant_id, user_id, role FROM collab_participant
+                WHERE session_id = $1 AND leave_at IS NULL AND NOT is_kicked`,
+              [data.sessionId]);
+            const userIds = new Set([s.rows[0].owner_user_id, ...ps.rows.map((r) => r.user_id)]);
+            for (const uid of userIds) sendToUser(uid, 'collab', {
+              kind: 'participant_update', sessionId: data.sessionId, participants: ps.rows
+            });
+          }
+        } catch { /* 同上 */ }
+        send(ws, 'ack', { of: 'collab_leave' });
+        break;
+      }
+      case 'rtc_relay': {
+        // WebRTC SDP/ICE 会内中继（信令走后端 WebSocket，媒体流走 WebRTC P2P；
+        // P2P 不通时由 SFU 中转 —— Go SFU 二期，协议契约不变）
+        if (!data.sessionId || !data.toUserId || !data.payload) {
+          send(ws, 'error', { reason: 'rtc_relay 需要 sessionId + toUserId + payload' });
+          break;
+        }
+        try {
+          const m = await pool.query(
+            `SELECT 1 AS ok FROM collab_participant
+              WHERE session_id = $1 AND user_id = $2 AND leave_at IS NULL AND NOT is_kicked`,
+            [data.sessionId, data.toUserId]);
+          if (!m.rows[0]) { send(ws, 'error', { reason: 'target not in session' }); break; }
+          const me = await pool.query(
+            `SELECT 1 AS ok FROM collab_participant
+              WHERE session_id = $1 AND user_id = $2 AND leave_at IS NULL AND NOT is_kicked`,
+            [data.sessionId, ws.userId]);
+          if (!me.rows[0]) { send(ws, 'error', { reason: 'you are not in this session' }); break; }
+          sendToUser(data.toUserId, 'collab', {
+            kind: 'rtc', sessionId: data.sessionId, from: ws.userId, payload: data.payload
+          });
+        } catch { send(ws, 'error', { reason: 'relay check failed' }); }
+        break;
+      }
       case 'request_audio_publish':
       case 'request_video_publish': {
         // 转发给 owner（REST 审批流已实现；此通道做低延迟通知）
@@ -122,7 +189,18 @@ wss.on('connection', (ws, req) => {
         break;
       }
       case 'input_event': {
-        // 输入事件仅转发给 session owner（owner 主机注入 WebMouseEvent/WebKeyboardEvent）
+        // 输入事件仅转发给 session owner（owner 主机注入 WebMouseEvent/WebKeyboardEvent）；
+        // 仅 controller 角色允许发送（服务端为唯一权威，v1.4.5 补校验）
+        try {
+          const role = await pool.query(
+            `SELECT role FROM collab_participant
+              WHERE session_id = $1 AND user_id = $2 AND leave_at IS NULL AND NOT is_kicked`,
+            [data.sessionId, ws.userId]);
+          if (role.rows[0]?.role !== 'controller') {
+            send(ws, 'error', { reason: 'input_event requires controller role' });
+            break;
+          }
+        } catch { /* DB 不可用时按原样转发（与 v1.4.4 行为一致） */ }
         const r = await pool.query(`SELECT owner_user_id FROM collab_session WHERE session_id = $1`, [data.sessionId]);
         if (r.rows[0]) sendToUser(r.rows[0].owner_user_id, 'collab', { kind: 'input_event', from: ws.userId, data });
         break;

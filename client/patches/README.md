@@ -21,11 +21,9 @@
 | `0170-nodebyte-import.patch` | CSV/浏览器数据导入器（密码/书签/历史） | 新增文件 | 128 | 🟢 |
 | `0180-nodebyte-translate.patch` | 翻译控制器（开源多供应商 API，整页/选区翻译 + DOM 还原） | 新增文件 | 128 | 🟢 |
 | `0190-nodebyte-office.patch` | 办公套件控制器 + 打印面板开关 + 独立 grd 资源包（v1.4.4） | 新增文件 | 128 | 🟢 |
-| `0200-hooks-policy-registry.patch` | 注册 Custom* 策略键进 policy_registry.cc + Provider 挂接 | hook | **需核实** | 🟡 |
-| `0210-hooks-sandbox-flag.patch` | CustomDisableRendererSandbox → 启动参数（高危：二次确认+审计+重启提示） | hook | **需核实** | 🔴 |
-| `0220-hooks-js-ws-policy.patch` | JS 开关 / WS 黑白名单 / 混合内容 ws:// / 指纹注入点 | hook | **需核实** | 🔴 |
-| `0230-hooks-offline-game.patch` | 离线错误页资源替换为自研游戏（grd 引用） | hook | 128 | 🟢 |
-| `0240-hooks-webui-register-print.patch` | WebUIConfig 统一注册挂接 + scheme 接入 + 打印入口重定向（策略门控原生回退） | hook | **需核实** | 🟡 |
+| `0250-nodebyte-collab.patch` | 协作会议控制器（REST 代理/WS 建连材料/远程指令白名单执行/设备状态采集）（v1.4.5） | 新增文件 | 2 | 🟢 |
+| `0230-hooks-build-wiring.patch` | hook（**154 真实基线**）：chrome/browser/BUILD.gn 接入 nodebyte 核心模块与 WebUI 控制器编译目标（v1.4.5） | Chromium 154.0.8037.57 | 1 | 🟢 |
+| `0240-hooks-webui-register.patch` | hook（**154 真实基线**）：RegisterChromeWebUIConfigs 注册挂接 + nodebyte:// 标准 scheme（v1.4.5；Ctrl+P 接管二期） | Chromium 154.0.8037.57 | 2 | 🟢 |
 
 ## 应用方式
 

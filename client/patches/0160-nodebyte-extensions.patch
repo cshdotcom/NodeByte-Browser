@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/extensions/extension_installer.cc b/chrome/browser/nodebyte/extensions/extension_installer.cc
-new file mode 100644
+new file mode 100755
 index 0000000..db15c5f
 --- /dev/null
 +++ b/chrome/browser/nodebyte/extensions/extension_installer.cc
@@ -202,7 +202,7 @@ index 0000000..db15c5f
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/extensions/extension_installer.h b/chrome/browser/nodebyte/extensions/extension_installer.h
-new file mode 100644
+new file mode 100755
 index 0000000..a3d997e
 --- /dev/null
 +++ b/chrome/browser/nodebyte/extensions/extension_installer.h
