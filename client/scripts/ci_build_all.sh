@@ -11,8 +11,22 @@
 set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [ -z "${REPO_ROOT}" ]; then
-  REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")../.." && pwd)"
+  REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
+
+# ---- 全量日志捕获 + EXIT 推 refs/heads/build-log（外部可读，诊断静默死点）----
+BUILD_LOG="/tmp/nb-build.log"
+exec > >(tee "${BUILD_LOG}") 2>&1
+push_build_log() {
+  local rc=$?
+  echo "[exit-trap] rc=${rc} at $(date -u +%H:%M:%S)"
+  mkdir -p /tmp/logpush && cd /tmp/logpush && git init -q 2>/dev/null || true
+  tail -c 2000000 "${BUILD_LOG}" > ./build.log || true
+  git -c user.email=ci@nodebyte.local -c user.name=ci add -A 2>/dev/null || true
+  git -c user.email=ci@nodebyte.local -c user.name=ci commit -qm "build log rc=${rc}" 2>/dev/null || true
+  git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/nodebyte-browser/NodeByte-Browser.git" "HEAD:refs/heads/build-log" 2>/dev/null || echo "[exit-trap] WARN log push failed"
+}
+trap push_build_log EXIT
 WORK="${CHROMIUM_WORKDIR:-/work/chromium-cache}"   # 持久缓存盘（源码 + out/）
 SRC="${WORK}/src"
 
@@ -82,7 +96,7 @@ export PATCH_BEST_EFFORT="${PATCH_BEST_EFFORT:-1}"
 bash "${REPO_ROOT}/client/scripts/apply_patches.sh" "${SRC}"
 
 # 3.5) 同步 WebUI 页面源码进树（grd 引用缺失会导致资源打包失败 —— v1.4.5 修复）
-bash "${REPO_ROOT}/client/scripts/sync_webui.sh" "${SRC}"
+bash -x "${REPO_ROOT}/client/scripts/sync_webui.sh" "${SRC}"
 
 # 4) gn args + ninja 编译（默认 hosted 参数：关 ThinLTO，云机 16 核内存适配；
 #    自托管 32GB+ 机器可 MODE=release ARGS_FILE=client/gn/args-release-pc.gn 覆盖）
