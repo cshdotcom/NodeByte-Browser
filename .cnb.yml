@@ -36,7 +36,7 @@ main:
             - REPO_DIR=$(pwd)
             - git init -q /tmp/patch-check
             - cd /tmp/patch-check
-            - for p in ${REPO_DIR}/client/patches/01*.patch; do git apply --check "$p" || exit 1; echo "patch OK: $(basename $p)"; done
+            - for p in $REPO_DIR/client/patches/01*.patch; do git apply --check "$p" || exit 1; echo "patch OK: $(basename $p)"; done
         - name: 服务端安装与类型检查
           script:
             - cd server && npm ci --cache /root/.npm --prefer-offline --no-audit --fund=false
