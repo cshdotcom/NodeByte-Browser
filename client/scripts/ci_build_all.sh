@@ -9,7 +9,7 @@
 #   2) sync_webui.sh：grd 引用的页面源码必须同步进树，缺失 = 资源打包失败；
 #   3) 默认用 args-hosted-pc.gn（关 ThinLTO/is_official_build，适配 16 核云机内存）。
 set -euo pipefail
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "${REPO_ROOT}" ]; then
   REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
@@ -23,7 +23,7 @@ push_build_log() {
   mkdir -p /tmp/logpush && cd /tmp/logpush && git init -q 2>/dev/null || true
   tail -c 2000000 "${BUILD_LOG}" > ./build.log || true
   git -c user.email=ci@nodebyte.local -c user.name=ci add -A 2>/dev/null || true
-  git -c user.email=ci@nodebyte.local -c user.name=ci commit -qm "build log rc=${rc}" 2>/dev/null || true
+  git -c user.email=ci@nodebyte.local -c user.name=ci commit -q --allow-empty -m "build log rc=${rc}" 2>/dev/null || true
   git push -q "https://cnb:${CNB_TOKEN}@cnb.cool/nodebyte-browser/NodeByte-Browser.git" "HEAD:refs/heads/build-log" 2>/dev/null || echo "[exit-trap] WARN log push failed"
 }
 trap push_build_log EXIT
