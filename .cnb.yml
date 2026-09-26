@@ -33,10 +33,9 @@ main:
             - echo "shell syntax OK"
         - name: 客户端补丁干跑校验（新增文件型补丁必须全部可干净应用）
           script:
-            - REPO_DIR=$(pwd)
             - git init -q /tmp/patch-check
             - cd /tmp/patch-check
-            - for p in $REPO_DIR/client/patches/01*.patch; do git apply --check "$p" || exit 1; echo "patch OK: $(basename $p)"; done
+            - for p in "$OLDPWD"/client/patches/01*.patch; do git apply --check "$p" || exit 1; echo "patch OK: $p"; done
         - name: 服务端安装与类型检查
           script:
             - cd server && npm ci --cache /root/.npm --prefer-offline --no-audit --fund=false
@@ -72,7 +71,9 @@ main:
       stages:
         - name: 构建开始标记（推 tag ci-build-start-<sha> 供外部监控）
           script:
-            - git tag -f "ci-build-start-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-start-$(git rev-parse --short HEAD)" || echo "WARN_MARKER_PUSH_FAILED"
+            - git rev-parse --short HEAD | xargs -I{} git tag -f ci-build-start-{}
+            - git rev-parse --short HEAD | xargs -I{} git push -q origin refs/tags/ci-build-start-{}
+            - echo "start marker done"
         - name: 预检（磁盘/内存不足立即失败，不进入长编译）
           script:
             - bash client/scripts/ci_precheck.sh
@@ -81,7 +82,9 @@ main:
             - bash client/scripts/ci_build_all.sh
         - name: 成功标记（推 tag ci-build-ok-<sha>）
           script:
-            - git tag -f "ci-build-ok-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-ok-$(git rev-parse --short HEAD)" || echo "WARN_OK_MARKER_PUSH_FAILED"
+            - git rev-parse --short HEAD | xargs -I{} git tag -f ci-build-ok-{}
+            - git rev-parse --short HEAD | xargs -I{} git push -q origin refs/tags/ci-build-ok-{}
+            - echo "ok marker done"
 
 # 专用编译分支：push 到 chromium-build 分支 = 触发全量编译（v1.4.5 新增；
 # 令牌无 repo-cnb-trigger 权限时的等效手动触发通道，与 web_trigger 同一构建定义）。
@@ -95,7 +98,9 @@ chromium-build:
       stages:
         - name: 构建开始标记（推 tag ci-build-start-<sha> 供外部监控）
           script:
-            - git tag -f "ci-build-start-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-start-$(git rev-parse --short HEAD)" || echo "WARN_MARKER_PUSH_FAILED"
+            - git rev-parse --short HEAD | xargs -I{} git tag -f ci-build-start-{}
+            - git rev-parse --short HEAD | xargs -I{} git push -q origin refs/tags/ci-build-start-{}
+            - echo "start marker done"
         - name: 预检（磁盘/内存不足立即失败，不进入长编译）
           script:
             - bash client/scripts/ci_precheck.sh
@@ -104,4 +109,6 @@ chromium-build:
             - bash client/scripts/ci_build_all.sh
         - name: 成功标记（推 tag ci-build-ok-<sha>）
           script:
-            - git tag -f "ci-build-ok-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-ok-$(git rev-parse --short HEAD)" || echo "WARN_OK_MARKER_PUSH_FAILED"
+            - git rev-parse --short HEAD | xargs -I{} git tag -f ci-build-ok-{}
+            - git rev-parse --short HEAD | xargs -I{} git push -q origin refs/tags/ci-build-ok-{}
+            - echo "ok marker done"
