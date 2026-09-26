@@ -30,10 +30,14 @@ mkdir -p "out/${OUT_DIR}"
 cp "${ARGS_FILE}" "out/${OUT_DIR}/args.gn"
 
 # gn args 写入后 gen（改 gn args 会破坏增量缓存 → 全量重编，提示词 10.5.4）
+echo "[gn] gen start $(date -u +%H:%M:%S)"
 gn gen "out/${OUT_DIR}"
+echo "[gn] gen done $(date -u +%H:%M:%S)"
 
 # 编译（autoninja 按 -j 参数并行；托管 4 核自动适配）
+echo "[ninja] start $(date -u +%H:%M:%S)"
 autoninja -C "out/${OUT_DIR}" chrome
+echo "[ninja] done $(date -u +%H:%M:%S)"
 
 echo "build done: out/${OUT_DIR}/"
 ls -la "out/${OUT_DIR}/chrome" 2>/dev/null || ls -la "out/${OUT_DIR}/chrome.exe" 2>/dev/null || true

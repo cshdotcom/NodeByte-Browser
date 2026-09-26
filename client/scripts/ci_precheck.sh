@@ -11,6 +11,11 @@ CPU=$(nproc)
 MEM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo)
 MEM_GB=$((MEM_KB / 1024 / 1024))
 DISK_GB=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
+# 实际源码/产物在 CHROMIUM_WORKDIR（默认 /work/chromium-cache）——按该盘判定
+WORK_DIR="${CHROMIUM_WORKDIR:-/work/chromium-cache}"
+mkdir -p "${WORK_DIR}" 2>/dev/null || true
+DISK_GB=$(df -BG --output=avail "${WORK_DIR}" 2>/dev/null | tail -1 | tr -dc '0-9' || echo "${DISK_GB}")
+echo "work dir: ${WORK_DIR} | avail: ${DISK_GB}GB"
 
 echo "CPU: ${CPU} cores | MEM: ${MEM_GB} GB | DISK avail: ${DISK_GB} GB"
 

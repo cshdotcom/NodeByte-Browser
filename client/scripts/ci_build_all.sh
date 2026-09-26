@@ -66,6 +66,8 @@ for attempt in 1 2 3 4 5; do
     kill "${HB_PID}" 2>/dev/null || true
     fetch_ok=1
     echo "==> 源码同步完成（第 ${attempt} 次尝试）"
+    echo "[disk] $(df -h "${SRC}" 2>/dev/null | tail -1)"
+    echo "[size] src=$(du -sh "${SRC}" 2>/dev/null | cut -f1) .git=$(du -sh "${SRC}/.git" 2>/dev/null | cut -f1)"
     break
   fi
   kill "${HB_PID}" 2>/dev/null || true
