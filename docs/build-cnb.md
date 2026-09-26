@@ -60,6 +60,9 @@ CNB 免费核时有限，Chromium 编译建议优先自托管构建机（提示�
 2. **编程触发（v1.4.5）**：`POST https://api.cnb.cool/{repo}/-/build/start`
    （Bearer token，body `{"event":"api_trigger"}`）→ 返回 sn →
    `GET /-/build/status/{sn}` 轮询；
+3. **编译分支触发（v1.4.5 推荐）**：push 到 `chromium-build` 分支即触发
+   nodebyte-chromium-build（令牌无 repo-cnb-trigger scope 时的等效通道）；
+   流水线会推 `ci-build-start-<sha>` / `ci-build-ok-<sha>` 状态 tag 供外部监控；
 2. 观察 precheck 输出，规格不足先扩容或改自托管；
 3. 产物（chrome / chrome.exe / NodeByteBrowser.apk）在 stages 产物区下载，
    后续接入 `package_windows.sh` / `package_linux.sh` 打包安装器。

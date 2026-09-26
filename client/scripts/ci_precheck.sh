@@ -16,6 +16,10 @@ echo "CPU: ${CPU} cores | MEM: ${MEM_GB} GB | DISK avail: ${DISK_GB} GB"
 
 [ "${CPU}" -ge 16 ] || fail "需要 ≥16 核（当前 ${CPU}）——请使用自托管构建机或更高规格"
 [ "${MEM_GB}" -ge 30 ] || fail "需要 ≥32GB 内存（当前 ${MEM_GB}）——链接阶段 12-20GB 会 OOM"
-[ "${DISK_GB}" -ge 240 ] || fail "需要 ≥250GB 空闲磁盘（当前 ${DISK_GB}）——源码+产物需 120-200GB"
+# 磁盘门槛按编译参数分档：hosted（默认，关 LTO/零符号）峰值 ~100GB → 140GB 阈值；
+# release 全量（use_thin_lto=true）需 240GB —— 用 RELEASE_PROFILE=1 启用严格档
+PROFILE_DISK=140
+if [ "${RELEASE_PROFILE:-0}" = "1" ]; then PROFILE_DISK=240; fi
+[ "${DISK_GB}" -ge ${PROFILE_DISK} ] || fail "需要 ≥${PROFILE_DISK}GB 空闲磁盘（当前 ${DISK_GB}）——hosted 编译峰值约 100GB（源码~30 + out~50 + 缓存~20）"
 
 echo "PRECHECK OK: 满足 Chromium 全量编译门槛"
