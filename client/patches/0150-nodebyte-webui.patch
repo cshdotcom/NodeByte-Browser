@@ -34,7 +34,7 @@ new file mode 100644
 +  ]
 +}
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.cc
 @@ -0,0 +1,39 @@
@@ -78,7 +78,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_drop_ui.h
 @@ -0,0 +1,31 @@
@@ -114,7 +114,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_DROP_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.cc
 @@ -0,0 +1,90 @@
@@ -209,7 +209,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_login_ui.h
 @@ -0,0 +1,45 @@
@@ -259,7 +259,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_LOGIN_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.cc
 @@ -0,0 +1,37 @@
@@ -301,7 +301,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_office_ui.h
 @@ -0,0 +1,29 @@
@@ -335,7 +335,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_OFFICE_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.cc
 @@ -0,0 +1,32 @@
@@ -372,7 +372,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_print_ui.h
 @@ -0,0 +1,28 @@
@@ -405,7 +405,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_NODEBYTE_NODEBYTE_PRINT_UI_H_
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.cc b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.cc
 @@ -0,0 +1,140 @@
@@ -550,7 +550,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/webui/nodebyte/nodebyte_ui_configs.h
 @@ -0,0 +1,21 @@

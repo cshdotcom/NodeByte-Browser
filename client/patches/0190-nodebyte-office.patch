@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/office/office_controller.cc b/chrome/browser/nodebyte/office/office_controller.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/office/office_controller.cc
 @@ -0,0 +1,86 @@
@@ -90,7 +90,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/office/office_controller.h b/chrome/browser/nodebyte/office/office_controller.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/office/office_controller.h
 @@ -0,0 +1,29 @@
@@ -124,7 +124,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_OFFICE_OFFICE_CONTROLLER_H_
 diff --git a/chrome/browser/nodebyte/print/print_panel.cc b/chrome/browser/nodebyte/print/print_panel.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/print/print_panel.cc
 @@ -0,0 +1,22 @@
@@ -151,7 +151,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/print/print_panel.h b/chrome/browser/nodebyte/print/print_panel.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/print/print_panel.h
 @@ -0,0 +1,20 @@
@@ -176,7 +176,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_PRINT_PRINT_PANEL_H_
 diff --git a/chrome/browser/resources/nodebyte/BUILD.gn b/chrome/browser/resources/nodebyte/BUILD.gn
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/resources/nodebyte/BUILD.gn
 @@ -0,0 +1,14 @@
@@ -195,7 +195,7 @@ new file mode 100755
 +  output_dir = "$root_gen_dir/chrome/browser/resources/nodebyte"
 +}
 diff --git a/chrome/browser/resources/nodebyte/README.md b/chrome/browser/resources/nodebyte/README.md
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/resources/nodebyte/README.md
 @@ -0,0 +1,23 @@
@@ -223,7 +223,7 @@ new file mode 100755
 +- translate/app.js 若尚未存在则以 index.html 内联脚本为准（grd 仅登记存在的文件）。
 +- usercenter/index.html 为占位跳转页（在线个人中心，v1.4.x 交付语义）。
 diff --git a/chrome/browser/resources/nodebyte/nodebyte_resources.grd b/chrome/browser/resources/nodebyte/nodebyte_resources.grd
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/resources/nodebyte/nodebyte_resources.grd
 @@ -0,0 +1,46 @@

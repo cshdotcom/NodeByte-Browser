@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/cookie_sessions/cookie_session_store.cc b/chrome/browser/nodebyte/cookie_sessions/cookie_session_store.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/cookie_sessions/cookie_session_store.cc
 @@ -0,0 +1,153 @@
@@ -157,7 +157,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/cookie_sessions/cookie_session_store.h b/chrome/browser/nodebyte/cookie_sessions/cookie_session_store.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/cookie_sessions/cookie_session_store.h
 @@ -0,0 +1,92 @@

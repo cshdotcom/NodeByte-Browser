@@ -38,10 +38,15 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 
 # 在临时 git 仓库里准备 src-nodebyte 内容（保持相对路径结构）
 cp -r "${SRC_DIR}/." "${TMP_DIR}/"
+# 权限归一化：补丁记录的 mode 必须跨环境一致（本地工作区可能出现 755 噪音，
+# GH/CI 检出恒为 644）—— 全部文件 0644 / 目录 0755，与 git index 一致
+find "${TMP_DIR}" -type f -exec chmod 0644 {} +
+find "${TMP_DIR}" -type d -exec chmod 0755 {} +
 cd "${TMP_DIR}"
 git init -q
 git config user.email "patch-gen@nodebyte.local"
 git config user.name "patch-gen"
+git config core.fileMode false
 git add -A
 
 for name in "${!PATCH_GROUPS[@]}"; do

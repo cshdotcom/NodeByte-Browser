@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.cc b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.cc
 @@ -0,0 +1,125 @@
@@ -129,7 +129,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/drop/drop_side_panel_coordinator.h
 @@ -0,0 +1,83 @@
@@ -217,7 +217,7 @@ new file mode 100755
 +
 +#endif  // CHROME_BROWSER_NODEBYTE_DROP_DROP_SIDE_PANEL_COORDINATOR_H_
 diff --git a/chrome/browser/nodebyte/fingerprint/fingerprint_profile.cc b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.cc
 @@ -0,0 +1,93 @@
@@ -315,7 +315,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/fingerprint/fingerprint_profile.h b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/fingerprint/fingerprint_profile.h
 @@ -0,0 +1,68 @@

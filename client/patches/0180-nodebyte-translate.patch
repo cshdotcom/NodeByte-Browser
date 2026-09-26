@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/nodebyte/translate/translate_controller.cc b/chrome/browser/nodebyte/translate/translate_controller.cc
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/translate/translate_controller.cc
 @@ -0,0 +1,236 @@
@@ -240,7 +240,7 @@ new file mode 100755
 +
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/translate/translate_controller.h b/chrome/browser/nodebyte/translate/translate_controller.h
-new file mode 100755
+new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/nodebyte/translate/translate_controller.h
 @@ -0,0 +1,101 @@
