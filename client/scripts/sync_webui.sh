@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SRC="${1:?usage: sync_webui.sh /path/to/chromium/src}"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 DEST="${SRC}/chrome/browser/resources/nodebyte"
 
 if [ ! -d "${SRC}" ]; then

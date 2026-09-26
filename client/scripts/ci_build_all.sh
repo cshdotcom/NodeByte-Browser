@@ -9,7 +9,7 @@
 #   2) sync_webui.sh：grd 引用的页面源码必须同步进树，缺失 = 资源打包失败；
 #   3) 默认用 args-hosted-pc.gn（关 ThinLTO/is_official_build，适配 16 核云机内存）。
 set -euo pipefail
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="${CHROMIUM_WORKDIR:-/work/chromium-cache}"   # 持久缓存盘（源码 + out/）
 SRC="${WORK}/src"
 
@@ -31,9 +31,16 @@ if [ ! -f depot_tools/python3_bin_reldir.txt ]; then
   }
 fi
 
-# 2) 官方正式版源码（gclient fetch --no-history；googlesource 大仓库从国内网络
-#    易静默挂死 —— 心跳保活 + 断点续传重试，v1.4.5 编译监督修复）
-cd "${WORK}"   # fetch 必须在 WORK 根执行：.gclient@WORK，源码树 WORK/src=SRC（旧写法在 SRC 内 fetch 会产生双层 src/src）
+# 2) 官方正式版 stable 源码（钉住版本，hook 0230/0240 基于 154 基线）：
+#    不用 `fetch chromium`（默认 trunk，基线漂移）；gclient config + sync -r 钉 tag；
+#    googlesource 大仓库从国内网络易静默挂死 —— 心跳保活 + 断点续传重试
+cd "${WORK}"   # gclient root = WORK，源码树 WORK/src = SRC
+CHROMIUM_VERSION="${CHROMIUM_VERSION:-$(curl -sS -m 20 'https://versionhistory.googleapis.com/v1/chrome/platforms/linux/channels/stable/versions' 2>/dev/null | python3 -c "import json,sys;print(json.load(sys.stdin)['versions'][0]['version'])" 2>/dev/null || true)}"
+CHROMIUM_VERSION="${CHROMIUM_VERSION:-154.0.8037.57}"
+echo "==> 钉定 Chromium stable: ${CHROMIUM_VERSION}"
+if [ ! -f "${WORK}/.gclient" ]; then
+  gclient config --name=src "https://chromium.googlesource.com/chromium/src.git"
+fi
 heartbeat_start() {
   while kill -0 "$1" 2>/dev/null; do
     sleep 45
@@ -41,12 +48,8 @@ heartbeat_start() {
   done
 }
 sync_attempt() {
-  # 已有 .gclient → 增量续传；否则首次 fetch
-  if [ ! -f "${WORK}/.gclient" ]; then
-    fetch --no-history chromium
-  else
-    gclient sync -D --no-history
-  fi
+  # 统一走 gclient sync（可断点续传）；-r 钉 stable tag
+  gclient sync -D --no-history -r "src@${CHROMIUM_VERSION}"
 }
 # 最多 5 次尝试（gclient sync 断点续传，每次从中断处继续）
 fetch_ok=0
