@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-CNB_PATH="${CNB_PATH:-cnb.dEzCZ5lCAHA/NodeByte-Browser}"
+CNB_PATH="${CNB_PATH:-nodebyte-browser/NodeByte-Browser}"
 BRANCHES="${BRANCHES:-main --tags}"
 
 if git remote get-url cnb >/dev/null 2>&1; then

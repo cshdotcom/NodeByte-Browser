@@ -7,6 +7,35 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-26
+
+### Added（可塑性动态服务器绑定 + TTS/更新/扩展代理三项后端代理改造 + CNB 自动建仓）
+
+- **可塑性（用户核心需求：同步服务器地址改了 → 所有接口自动跟随）**：
+  - 客户端铁律：任何模块禁止写死服务器地址，全部经 `NodeByteProtocol::ApiBase()` 动态取「当前生效地址」
+  - 解析优先级：策略指令 NodeByteSyncServerOverride > 用户设置 > 编译默认
+  - 变更传播 `NotifySyncServerChanged`：同步重拉策略 → WebSocket 重连 → Drop/翻译/TTS/更新/扩展各模块基地址缓存失效重建，无需重启浏览器
+  - 覆盖接口：策略/同步/Drop/认证/文件/翻译/TTS/检查更新/扩展下载/WebSocket 全清单（docs/upstream-services.md 1.3）
+- **TTS 朗读改为后端代理**（原方案客户端直连 Edge 公有云 → 改造）：
+  - `server/src/lib/tts.ts` 三上游：`edge_tts_server`（自托管免费无限，默认启用）/ `azure_speech`（F0 50 万字/月，SSML）/ `openai_speech`（OpenAI 兼容，含本地）
+  - `POST /api/tts` 返回音频流（mp3/ogg/wav）；登录 + 策略 NodeByteTtsEnabled + 单次上限 NodeByteTtsMaxChars（3000）
+  - `GET/PUT /api/admin/tts-config` + `POST /api/admin/tts-test`（一键合成测试）
+  - 音色/元信息 `GET /api/tts`；设置页新增「朗读」段（音色选择 + 试听按钮）
+- **浏览器更新检查改为后端代理**（原 Chromium Omaha/Google 更新源 → 改造）：
+  - `GET /api/client/update?platform&arch&version`：后台手工版本清单 或 上游 manifest JSON 转发双模式
+  - 语义化版本比较；支持强制更新标志、各平台下载地址（win-x64/android-arm64/linux-x64…）
+  - 策略 NodeByteUpdateCheckEnabled
+- **扩展商店代理下载**：
+  - `GET /api/client/ext-download?store=edge|chromeweb&extId`：后台启用代理 + Edge/Chrome 镜像模板（{extId} 占位），未启用回退直连
+  - 策略 NodeByteExtProxyDownload
+- **后台「上游服务」面板**（新标签页）：TTS / 更新源 / 扩展代理三卡片（增删改排序 + 凭据按类型动态渲染 + 一键测试 + 密钥脱敏/merge）
+- **策略键新增（纳入指令下发/撤销）**：NodeByteTtsEnabled / NodeByteTtsMaxChars / NodeByteUpdateCheckEnabled / NodeByteExtProxyDownload
+- **客户端常量**：kApiPath* 全接口路径常量 + ApiBase 动态推导注释铁律 + TTS/更新/扩展策略键（patch 0100 重新生成）
+- **CNB 自动建仓**（用户指令：API 已给，自己弄）：
+  - 拉取 api.cnb.cool swagger 定位 `POST /{slug}/-/repos` → 在用户组织 `nodebyte-browser` 下创建 `NodeByte-Browser`（201）
+  - push-cnb.sh 默认路径更新为 `nodebyte-browser/NodeByte-Browser`；已推送 main + 全部 tags（v0.1.0~v1.4.1）
+- **CI**：upstream-selftest.mjs（30 项）加入 CNB lite-validate 与 GitHub server-ci；本地预检 tsc/standalone/三自测（100+ 项）/9 补丁干跑全过
+
 ## [1.4.1] - 2026-09-26
 
 ### Added（翻译 API 全矩阵 15 种 + 后台可视化配置 + 一键测试）

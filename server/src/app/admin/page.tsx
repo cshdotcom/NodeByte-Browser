@@ -15,7 +15,7 @@ type Stats = {
 
 function Shell() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'translate' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'translate' | 'upstream' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
   const [me, setMe] = useState<{ username: string; isAdmin: boolean } | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ function Shell() {
       <div className="container">
         <div className="tabs">
           {([['stats', t('overview')], ['users', t('users')], ['groups', t('groups')], ['policy', t('policy')],
-             ['directives', t('directives')], ['import', t('importCenter')], ['translate', t('translate')],
+             ['directives', t('directives')], ['import', t('importCenter')], ['translate', t('translate')], ['upstream', t('upstream')],
              ['files', t('files')], ['ext', t('extensions')], ['audit', t('audit')], ['settings', t('settings')]] as const).map(([k, label]) => (
             <div key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{label}</div>
           ))}
@@ -53,6 +53,7 @@ function Shell() {
         {tab === 'directives' && <DirectivesPanel />}
         {tab === 'import' && <ImportPanel />}
         {tab === 'translate' && <TranslatePanel />}
+        {tab === 'upstream' && <UpstreamPanel />}
         {tab === 'files' && <FilesPanel />}
         {tab === 'ext' && <ExtPanel />}
         {tab === 'audit' && <AuditPanel />}
@@ -830,6 +831,264 @@ function TranslatePanel() {
         凭据加密说明：密钥仅存服务端 system_setting（数据库），随配置下发到浏览器端的只有「脱敏后的
         provider 清单」（不含密钥）。测试按钮发送 "Hello, world! This is a test." → zh-CN，返回延迟与样例译文。
         带 •• 的密钥表示已保存（留空保存即保留原密钥）。
+      </p>
+    </div>
+  );
+}
+
+/* =====================================================================
+   上游服务配置（v1.4.2）：TTS 朗读 / 浏览器更新源 / 扩展商店代理
+   模式：浏览器 → NodeByte 后端 → 后台配置的上游（密钥仅存服务端）
+   ===================================================================== */
+
+type TtsMeta = { label: string; license: string; keyShape: 'none' | 'apiKey' | 'keyRegion' | 'keyModel'; defaultEndpoint: string; freeTier: string; defaultVoice: string };
+type TtsRow = { provider: string; endpoint?: string; apiKey?: string; region?: string; model?: string; voice?: string; weight: number; enabled: boolean };
+
+function UpstreamPanel() {
+  const { t } = useI18n();
+  const [msg, setMsg] = useState('');
+
+  // ---- TTS ----
+  const [ttsCfg, setTtsCfg] = useState<{ settings: { enabled: boolean; maxChars: number; auditLog: boolean; defaultVoice: string; defaultFormat: string; providers: TtsRow[] }; meta: Record<string, TtsMeta>; types: string[] } | null>(null);
+  const [ttsRows, setTtsRows] = useState<TtsRow[]>([]);
+  const [ttsTesting, setTtsTesting] = useState<number | null>(null);
+  const [ttsResults, setTtsResults] = useState<Record<number, { ok: boolean; detail: string; bytes?: number; latencyMs?: number }>>({});
+
+  // ---- 更新源 ----
+  const [upd, setUpd] = useState<{ enabled: boolean; latestVersion: string; downloadUrls: Record<string, string>; mandatory: boolean; notes: string; upstreamManifestUrl: string } | null>(null);
+
+  // ---- 扩展代理 ----
+  const [ext, setExt] = useState<{ enabled: boolean; proxyEnabled: boolean; edgeMirror: string; chromeMirror: string } | null>(null);
+
+  const load = useCallback(async () => {
+    const [a, b, c] = await Promise.all([
+      api<{ settings: { enabled: boolean; maxChars: number; auditLog: boolean; defaultVoice: string; defaultFormat: string; providers: TtsRow[] }; meta: Record<string, TtsMeta>; types: string[] }>('/api/admin/tts-config', { headers: bearerHeaders() }),
+      api<{ settings: Record<string, unknown> }>('/api/admin/settings', { headers: bearerHeaders() }),
+      api<{ settings: Record<string, unknown> }>('/api/admin/settings', { headers: bearerHeaders() }),
+    ]);
+    if (a.code === 0 && a.data) {
+      setTtsCfg(a.data);
+      setTtsRows(a.data.settings?.providers ?? []);
+    }
+    if (b.code === 0 && b.data) {
+      const uc = (b.data.settings['update_config'] ?? {}) as Record<string, unknown>;
+      setUpd({
+        enabled: uc.enabled === true,
+        latestVersion: (uc.latestVersion as string) ?? '',
+        downloadUrls: (uc.downloadUrls as Record<string, string>) ?? {},
+        mandatory: uc.mandatory === true,
+        notes: (uc.notes as string) ?? '',
+        upstreamManifestUrl: (uc.upstreamManifestUrl as string) ?? '',
+      });
+      const ec = (c.code === 0 && c.data ? c.data.settings['ext_download_config'] : {}) as Record<string, unknown> ?? {};
+      setExt({
+        enabled: ec.enabled === true,
+        proxyEnabled: ec.proxyEnabled === true,
+        edgeMirror: (ec.edgeMirror as string) ?? '',
+        chromeMirror: (ec.chromeMirror as string) ?? '',
+      });
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!ttsCfg || !upd || !ext) return <span className="spin" />;
+
+  const meta = ttsCfg.meta ?? {};
+
+  const saveSettings = async (key: string, value: unknown, label: string) => {
+    const r = await api('/api/admin/settings', { method: 'PATCH', headers: bearerHeaders(), json: { key, value } });
+    setMsg(`${label}: ${r.message}`);
+  };
+
+  const saveTts = async () => {
+    const r = await api('/api/admin/tts-config', {
+      method: 'PUT', headers: bearerHeaders(),
+      json: {
+        ...ttsCfg.settings,
+        providers: ttsRows.map((r) => ({ ...r, apiKey: r.apiKey && r.apiKey.startsWith('••') ? undefined : (r.apiKey || undefined) })),
+      },
+    });
+    setMsg(`TTS 配置: ${r.message}`);
+    if (r.code === 0) load();
+  };
+
+  const testTts = async (i: number) => {
+    setTtsTesting(i);
+    setTtsResults((m) => ({ ...m, [i]: { ok: false, detail: '测试中…' } }));
+    const row = ttsRows[i];
+    const r = await api<{ ok: boolean; detail: string; bytes?: number; latencyMs?: number }>('/api/admin/tts-test', {
+      method: 'POST', headers: bearerHeaders(),
+      json: { ...row, apiKey: row.apiKey && row.apiKey.startsWith('••') ? undefined : row.apiKey },
+    });
+    setTtsResults((m) => ({ ...m, [i]: r.code === 0 && r.data ? r.data : { ok: false, detail: r.message || '请求失败' } }));
+    setTtsTesting(null);
+  };
+
+  const updTts = (i: number, patch: Partial<TtsRow>) => setTtsRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  return (
+    <div>
+      {msg && <div className="notice notice-ok">{msg}</div>}
+
+      {/* ============ TTS 朗读 ============ */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title">TTS 朗读上游（电子书 / PDF 朗读）</div>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          客户端朗读不再直连 Edge 公有云：请求经本后端 <code>/api/tts</code>，再按此处配置的上游合成。
+          默认推荐自托管 Edge TTS HTTP 服务（Docker：<code>docker run -p 3000:3000 ghcr.io/eitherlab/edge-tts-server</code>）；
+          也可填 Azure 语音（F0 免费 50 万字/月）或 OpenAI 兼容 TTS。密钥仅存服务端。
+        </p>
+        <div className="row" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+          <b>总开关</b>
+          <button className={`btn btn-sm ${ttsCfg.settings.enabled ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setTtsCfg((c) => (c ? { ...c, settings: { ...c.settings, enabled: true } } : c))}>开启</button>
+          <button className={`btn btn-sm ${!ttsCfg.settings.enabled ? 'btn-danger' : 'btn-ghost'}`}
+            onClick={() => setTtsCfg((c) => (c ? { ...c, settings: { ...c.settings, enabled: false } } : c))}>关闭</button>
+          <span className="hint">单次上限</span>
+          <input className="input" style={{ width: 90 }} type="number" value={ttsCfg.settings.maxChars}
+            onChange={(e) => setTtsCfg((c) => (c ? { ...c, settings: { ...c.settings, maxChars: Number(e.target.value) || 3000 } } : c))} />
+          <span className="hint">默认音色</span>
+          <input className="input mono" style={{ width: 220 }} value={ttsCfg.settings.defaultVoice}
+            onChange={(e) => setTtsCfg((c) => (c ? { ...c, settings: { ...c.settings, defaultVoice: e.target.value } } : c))} />
+          <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={ttsCfg.settings.auditLog}
+              onChange={(e) => setTtsCfg((c) => (c ? { ...c, settings: { ...c.settings, auditLog: e.target.checked } } : c))} /> 审计
+          </label>
+        </div>
+        {ttsRows.map((row, i) => {
+          const m = meta[row.provider];
+          return (
+            <div key={`${row.provider}-${i}`} className="card" style={{ marginBottom: 8, padding: 10 }}>
+              <div className="row" style={{ flexWrap: 'wrap' }}>
+                <select className="input" style={{ width: 260 }} value={row.provider}
+                  onChange={(e) => updTts(i, { provider: e.target.value, endpoint: meta[e.target.value]?.defaultEndpoint ?? '' })}>
+                  {ttsCfg.types.map((tp) => <option key={tp} value={tp}>{meta[tp]?.label ?? tp}</option>)}
+                </select>
+                <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <input type="checkbox" checked={row.enabled} onChange={(e) => updTts(i, { enabled: e.target.checked })} /> 启用
+                </label>
+                <span className="hint">权重</span>
+                <input className="input" style={{ width: 70 }} type="number" value={row.weight} onChange={(e) => updTts(i, { weight: Number(e.target.value) })} />
+                {m && <span className="hint">{m.license} · {m.freeTier}</span>}
+              </div>
+              <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+                <span className="hint">端点</span>
+                <input className="input mono" style={{ flex: 1, minWidth: 200 }} placeholder={m?.defaultEndpoint ?? ''} value={row.endpoint ?? ''} onChange={(e) => updTts(i, { endpoint: e.target.value })} />
+                {m?.keyShape === 'keyRegion' && (
+                  <>
+                    <span className="hint">Key</span>
+                    <input className="input mono" style={{ width: 150 }} value={row.apiKey ?? ''} onChange={(e) => updTts(i, { apiKey: e.target.value })} />
+                    <span className="hint">区域</span>
+                    <input className="input" style={{ width: 100 }} placeholder="eastasia" value={row.region ?? ''} onChange={(e) => updTts(i, { region: e.target.value })} />
+                  </>
+                )}
+                {m?.keyShape === 'keyModel' && (
+                  <>
+                    <span className="hint">Key</span>
+                    <input className="input mono" style={{ width: 150 }} value={row.apiKey ?? ''} onChange={(e) => updTts(i, { apiKey: e.target.value })} />
+                    <span className="hint">模型</span>
+                    <input className="input mono" style={{ width: 120 }} placeholder="tts-1" value={row.model ?? ''} onChange={(e) => updTts(i, { model: e.target.value })} />
+                  </>
+                )}
+                <span className="hint">音色</span>
+                <input className="input mono" style={{ width: 200 }} placeholder={m?.defaultVoice ?? ''} value={row.voice ?? ''} onChange={(e) => updTts(i, { voice: e.target.value })} />
+                <button className="btn btn-ghost btn-sm" disabled={ttsTesting === i} onClick={() => testTts(i)}>{ttsTesting === i ? '测试中' : '测试'}</button>
+                <button className="btn btn-danger btn-sm" onClick={() => setTtsRows((rs) => rs.filter((_, j) => j !== i))}>删</button>
+              </div>
+              {ttsResults[i] && (
+                <div className={`notice ${ttsResults[i].ok ? 'notice-ok' : 'notice-danger'}`} style={{ marginTop: 6 }}>
+                  {ttsResults[i].ok ? '✓ ' : '✗ '}{ttsResults[i].detail}
+                  {ttsResults[i].latencyMs != null && ` · ${ttsResults[i].latencyMs}ms`}
+                  {ttsResults[i].bytes != null && ` · ${ttsResults[i].bytes} bytes 音频`}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div className="row-between" style={{ marginTop: 8 }}>
+          <select className="input" style={{ width: 300 }} id="ttsAddType" defaultValue="">
+            <option value="" disabled>＋ 添加 TTS 上游…</option>
+            {ttsCfg.types.filter((tp) => !ttsRows.some((r) => r.provider === tp)).map((tp) => (
+              <option key={tp} value={tp}>{meta[tp]?.label ?? tp}</option>
+            ))}
+          </select>
+          <div className="row">
+            <button className="btn btn-ghost" onClick={() => {
+              const v = (document.getElementById('ttsAddType') as HTMLSelectElement).value;
+              if (v) {
+                const m = meta[v];
+                const minW = ttsRows.reduce((acc, r) => Math.min(acc, r.weight), 100);
+                setTtsRows((rs) => [...rs, { provider: v, endpoint: m?.defaultEndpoint ?? '', weight: Math.max(0, minW - 10), enabled: true }]);
+              }
+            }}>添加</button>
+            <button className="btn btn-primary" onClick={saveTts}>保存 TTS 配置</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ============ 浏览器更新源 ============ */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title">浏览器更新源（客户端「检查更新」→ 本后端）</div>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          客户端更新检查走 <code>/api/client/update</code>（跟随同步服务器地址）。两种模式：
+          ① 手工维护版本清单（下方填写）；② 转发上游 manifest JSON（适合已有更新服务器，每次请求时拉取）。
+        </p>
+        <div className="row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+          <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={upd.enabled} onChange={(e) => setUpd((s) => (s ? { ...s, enabled: e.target.checked } : s))} /> 启用更新检查服务
+          </label>
+          <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={upd.mandatory} onChange={(e) => setUpd((s) => (s ? { ...s, mandatory: e.target.checked } : s))} /> 强制更新（不可跳过）
+          </label>
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <span className="hint">最新版本</span>
+          <input className="input mono" style={{ width: 130 }} placeholder="1.4.2" value={upd.latestVersion} onChange={(e) => setUpd((s) => (s ? { ...s, latestVersion: e.target.value } : s))} />
+          <span className="hint">win-x64 下载</span>
+          <input className="input mono" style={{ width: 240 }} placeholder="https://…/NodeByteSetup.exe" value={upd.downloadUrls['win-x64'] ?? ''} onChange={(e) => setUpd((s) => (s ? { ...s, downloadUrls: { ...s.downloadUrls, 'win-x64': e.target.value } } : s))} />
+          <span className="hint">android-arm64</span>
+          <input className="input mono" style={{ width: 240 }} placeholder="https://…/NodeByte.apk" value={upd.downloadUrls['android-arm64'] ?? ''} onChange={(e) => setUpd((s) => (s ? { ...s, downloadUrls: { ...s.downloadUrls, 'android-arm64': e.target.value } } : s))} />
+          <span className="hint">linux-x64</span>
+          <input className="input mono" style={{ width: 240 }} placeholder="https://…/nodebyte.deb" value={upd.downloadUrls['linux-x64'] ?? ''} onChange={(e) => setUpd((s) => (s ? { ...s, downloadUrls: { ...s.downloadUrls, 'linux-x64': e.target.value } } : s))} />
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+          <span className="hint">上游 manifest URL（可选）</span>
+          <input className="input mono" style={{ flex: 1, minWidth: 260 }} placeholder="https://updates.internal/nodebyte/manifest.json" value={upd.upstreamManifestUrl} onChange={(e) => setUpd((s) => (s ? { ...s, upstreamManifestUrl: e.target.value } : s))} />
+        </div>
+        <div className="field" style={{ marginTop: 6 }}>
+          <label>更新说明</label>
+          <textarea className="input" rows={2} value={upd.notes} onChange={(e) => setUpd((s) => (s ? { ...s, notes: e.target.value } : s))} />
+        </div>
+        <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => saveSettings('update_config', upd, '更新源')}>保存更新源</button>
+      </div>
+
+      {/* ============ 扩展商店代理 ============ */}
+      <div className="card">
+        <div className="card-title">扩展商店代理下载（客户端 → 本后端 → 商店/镜像）</div>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          客户端安装商店扩展时先问本后端 <code>/api/client/ext-download</code>；启用代理后由服务器统一出口下载
+          （内网不出公网场景），并可配置镜像模板（<code>{'{extId}'}</code> 占位）。关闭代理 = 客户端直连官方商店。
+        </p>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={ext.enabled} onChange={(e) => setExt((s) => (s ? { ...s, enabled: e.target.checked } : s))} /> 启用扩展下载服务
+          </label>
+          <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={ext.proxyEnabled} onChange={(e) => setExt((s) => (s ? { ...s, proxyEnabled: e.target.checked } : s))} /> 经服务端代理下载
+          </label>
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+          <span className="hint">Edge 商店镜像</span>
+          <input className="input mono" style={{ flex: 1, minWidth: 260 }} placeholder="https://mirror.internal/edge/{extId}.crx" value={ext.edgeMirror} onChange={(e) => setExt((s) => (s ? { ...s, edgeMirror: e.target.value } : s))} />
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+          <span className="hint">Chrome 商店镜像</span>
+          <input className="input mono" style={{ flex: 1, minWidth: 260 }} placeholder="https://mirror.internal/chrome/{extId}.crx" value={ext.chromeMirror} onChange={(e) => setExt((s) => (s ? { ...s, chromeMirror: e.target.value } : s))} />
+        </div>
+        <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => saveSettings('ext_download_config', ext, '扩展代理')}>保存扩展代理</button>
+      </div>
+
+      <p className="hint" style={{ marginTop: 10 }}>
+        注意：离开本页未保存的修改会丢失。所有上游密钥仅存服务端；客户端只访问本后端 API（跟随同步服务器地址自动切换）。
       </p>
     </div>
   );

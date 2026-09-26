@@ -57,10 +57,20 @@ export const NODEBYTE_POLICY_DEFAULTS: Record<string, unknown> = {
   NodeByteAllowCustomSyncServer: true,
   NodeByteSyncServerFallback: '',             // 上游强制下发的主同步服务器（空 = 用户自由）
 
-  // ---- 翻译（开源免费翻译 API：LibreTranslate / Lingva / MyMemory / DeepLX）----
+  // ---- 翻译（开源免费翻译 API：LibreTranslate / Lingva / MyMemory / DeepLX 等 15 种）----
   NodeByteTranslateEnabled: true,             // 翻译总开关（默认允许，可被上游拒绝）
   NodeByteTranslateAllowAnonymous: false,     // 是否允许未登录用户使用（默认仅登录用户）
   NodeByteTranslateMaxChars: 5000,            // 单次翻译字符上限
+
+  // ---- TTS 朗读（后端代理：Edge TTS 自托管 / Azure / OpenAI 兼容）----
+  NodeByteTtsEnabled: true,                   // 朗读总开关（电子书/PDF）
+  NodeByteTtsMaxChars: 3000,                  // 单次合成字符上限
+
+  // ---- 浏览器更新检查（后端 /api/client/update）----
+  NodeByteUpdateCheckEnabled: true,           // 允许客户端检查更新（不指定时默认开启）
+
+  // ---- 扩展商店代理下载（后端 /api/client/ext-download）----
+  NodeByteExtProxyDownload: true,             // 允许经服务器代理下载商店扩展（false 回退直连）
 };
 
 /** 把 NodeByte 默认值垫底合并进 mandatory（上游显式配置优先） */
@@ -114,5 +124,9 @@ export function summarizeForWeb(m: MergedPolicy): Record<string, unknown> {
     translateEnabled: policyBool(m.mandatory, 'NodeByteTranslateEnabled'),
     translateAllowAnonymous: policyBool(m.mandatory, 'NodeByteTranslateAllowAnonymous'),
     translateMaxChars: policyNumber(m.mandatory, 'NodeByteTranslateMaxChars'),
+    ttsEnabled: policyBool(m.mandatory, 'NodeByteTtsEnabled'),
+    ttsMaxChars: policyNumber(m.mandatory, 'NodeByteTtsMaxChars'),
+    updateCheckEnabled: policyBool(m.mandatory, 'NodeByteUpdateCheckEnabled'),
+    extProxyDownload: policyBool(m.mandatory, 'NodeByteExtProxyDownload'),
   };
 }

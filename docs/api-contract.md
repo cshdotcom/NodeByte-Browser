@@ -92,6 +92,17 @@
 `aliyun`（SHA1 RPC 签名）/ `niutrans` / `yandex` / `openai_compat`（LLM：DeepSeek/Ollama 等，共 15 种）。
 一条失败自动降级下一条；缓存命中直接返回。详见 docs/translate.md。
 
+### 2.8 上游服务（v1.4.2：先连后端 → 后台配置 → 上游）
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET/POST | `/api/tts` | TTS 朗读：GET 音色/元信息；POST `{ text, voice?, speed?, format? }` → 音频流（edge_tts_server/azure_speech/openai_speech 三上游自动降级） |
+| GET/PUT | `/api/admin/tts-config` + POST `/api/admin/tts-test` | TTS 上游配置与一键测试（密钥脱敏/merge） |
+| GET | `/api/client/update?platform&arch&version` | 浏览器更新检查：后台手工清单或上游 manifest 转发，语义化版本比较 |
+| GET | `/api/client/ext-download?store&extId` | 扩展商店代理下载：镜像模板 `{extId}` 或官方直连 |
+
+**可塑性**：以上全部接口（连同策略/同步/Drop/翻译/WS）地址均由「当前同步服务器地址」动态推导，
+策略指令 > 用户设置 > 编译默认；切换后无需重启自动重连（docs/upstream-services.md 一）。
+
 ## 3. WebSocket 信令协议（附录D）
 
 统一信封 `{ "type": "...", "seq": 1, "data": {...} }`；建连先发 `hello { deviceId, jwt }`。

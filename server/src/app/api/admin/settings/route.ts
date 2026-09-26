@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  * GET  /api/admin/settings — enable_public_register / smtp_config / 默认组 / 默认配额 / 全局默认策略
  * PATCH /api/admin/settings { key, value } — 修改（写审计）
  */
-const EDITABLE = new Set(['enable_public_register', 'default_quota_mb', 'default_group', 'smtp_config', 'global_policy', 'default_policy_sensitive_fields']);
+const EDITABLE = new Set(['enable_public_register', 'default_quota_mb', 'default_group', 'smtp_config', 'global_policy', 'default_policy_sensitive_fields', 'update_config', 'ext_download_config']);
 
 export async function GET(req: Request) {
   const admin = await authAdmin(req);

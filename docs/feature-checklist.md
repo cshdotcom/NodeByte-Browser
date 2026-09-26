@@ -231,6 +231,14 @@
 | 1 | 架构确认：浏览器先走后端，再通过后台配置连接翻译服务器 | ✅ | 客户端仅访问 POST /api/translate（JWT）；后端按后台配置的 provider 顺序连上游；密钥仅存服务端，浏览器拿不到 |
 | 2 | 后台配置时可配置多种接口和所有常用的翻译 API | ✅ | **15 种全矩阵**：google_free/edge_free/mymemory/libretranslate/lingva/deeplx/deepl/microsoft/baidu/youdao/tencent/aliyun/niutrans/yandex/openai_compat（免 Key + 开源自托管 + 官方免费额度 + LLM）+ 后台「翻译配置」面板（增删改排序 + 按类型动态凭据字段 + 一键测试 + 密钥脱敏/merge） |
 
+## 三d、v1.4.2 用户新增需求专项
+
+| # | 需求（用户原话要点） | 状态 | 落点 |
+|---|---|---|---|
+| 1 | CNB API 已给，自己弄（不要让用户网页建仓） | ✅ | swagger 定位 POST /{slug}/-/repos → 组织 nodebyte-browser 下建仓 201 → 推送 main+全 tags；push-cnb.sh 默认路径更新 |
+| 2 | 可塑性：同步服务器地址改了，自动改变连接的服务器的接口 | ✅ | 客户端 ApiBase() 动态推导（策略指令>用户设置>编译默认）+ NotifySyncServerChanged 传播（同步重拉/WS 重连/各模块缓存失效）+ kApiPath* 常量；docs/upstream-services.md 一 |
+| 3 | 检查还有哪些功能适合"先连后端→后台配置→上游"并改造 | ✅ | TTS 朗读（原直连 Edge 云→后端代理 3 上游）/ 检查更新（原 Google Omaha→后端清单或 manifest 转发）/ 扩展商店下载（官方→后端代理+镜像模板）；后台「上游服务」面板统一配置；未来候选清单见 docs/upstream-services.md 2.3 |
+
 ## 四、待 CI/二期事项（诚实清单）
 
 1. **客户端编译产物**：三平台工作流 Fetch/补丁阶段已打通，完整编译需自托管

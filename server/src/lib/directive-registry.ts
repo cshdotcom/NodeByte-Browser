@@ -80,6 +80,12 @@ export const DIRECTIVE_REGISTRY: Record<string, DirectiveMeta> = {
   NodeByteTranslateAllowAnonymous: { label: '允许未登录用户翻译', valueType: 'switch', defaultValue: false },
   NodeByteTranslateMaxChars: { label: '单次翻译字符上限', valueType: 'number', defaultValue: 5000 },
 
+  // ---- TTS / 更新 / 扩展代理（上游服务，v1.4.2）----
+  NodeByteTtsEnabled: { label: 'TTS 朗读（电子书/PDF，后端代理）', valueType: 'switch', defaultValue: true },
+  NodeByteTtsMaxChars: { label: '单次 TTS 合成字符上限', valueType: 'number', defaultValue: 3000 },
+  NodeByteUpdateCheckEnabled: { label: '允许客户端检查更新', valueType: 'switch', defaultValue: true },
+  NodeByteExtProxyDownload: { label: '扩展商店经服务器代理下载', valueType: 'switch', defaultValue: true },
+
   // ---- 地址 / 文本类 ----
   HomepageLocation: { label: '主页地址', valueType: 'text', defaultValue: '' },
   NodeByteSyncServerOverride: { label: '同步服务器地址（下发覆盖）', valueType: 'text', defaultValue: '' },
