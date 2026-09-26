@@ -34,8 +34,8 @@ main:
         - name: 客户端补丁干跑校验（新增文件型补丁必须全部可干净应用）
           script:
             - git init -q /tmp/patch-check
-            - cd /tmp/patch-check
-            - for p in "$OLDPWD"/client/patches/01*.patch; do git apply --check "$p" || exit 1; echo "patch OK: $p"; done
+            - git --git-dir=/tmp/patch-check/.git --work-tree=. apply --check client/patches/01*.patch
+            - echo "patch dry-run OK: all 01xx patches apply cleanly" 
         - name: 服务端安装与类型检查
           script:
             - cd server && npm ci --cache /root/.npm --prefer-offline --no-audit --fund=false
