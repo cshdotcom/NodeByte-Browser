@@ -31,13 +31,43 @@ if [ ! -f depot_tools/python3_bin_reldir.txt ]; then
   }
 fi
 
-# 2) 官方正式版源码（gclient fetch --no-history，首次全量/后续增量）
-if [ ! -f "${SRC}/.gclient" ]; then
-  mkdir -p "${SRC}" && cd "${SRC}"
-  fetch --no-history chromium
-else
-  cd "${SRC}" && gclient sync -D
-fi
+# 2) 官方正式版源码（gclient fetch --no-history；googlesource 大仓库从国内网络
+#    易静默挂死 —— 心跳保活 + 断点续传重试，v1.4.5 编译监督修复）
+mkdir -p "${SRC}" && cd "${SRC}"
+heartbeat_start() {
+  while kill -0 "$1" 2>/dev/null; do
+    sleep 45
+    echo "[hb] $(date -u +%H:%M:%S) src.git=$(du -sh "${SRC}/.git" 2>/dev/null | cut -f1) disk=$(df -h "${SRC}" 2>/dev/null | tail -1 | awk '{print $4}')"
+  done
+}
+sync_attempt() {
+  # 已有 .gclient → 增量续传；否则首次 fetch
+  if [ ! -f .gclient ]; then
+    fetch --no-history chromium
+  else
+    gclient sync -D --no-history
+  fi
+}
+# 最多 5 次尝试（gclient sync 断点续传，每次从中断处继续）
+fetch_ok=0
+for attempt in 1 2 3 4 5; do
+  echo "==> gclient fetch/sync 第 ${attempt} 次尝试"
+  sync_attempt &
+  FETCH_PID=$!
+  heartbeat_start "${FETCH_PID}" &
+  HB_PID=$!
+  if wait "${FETCH_PID}"; then
+    kill "${HB_PID}" 2>/dev/null || true
+    fetch_ok=1
+    echo "==> 源码同步完成（第 ${attempt} 次尝试）"
+    break
+  fi
+  kill "${HB_PID}" 2>/dev/null || true
+  echo "warn: 第 ${attempt} 次尝试失败，30s 后重试（断点续传）"
+  df -h "${SRC}" | tail -1
+  sleep 30
+done
+[ "${fetch_ok}" = "1" ] || { echo "error: 源码同步 5 次尝试均失败" >&2; df -h "${SRC}" >&2; du -sh "${SRC}/.git" >&2; exit 1; }
 
 # 3) 打 NodeByte 补丁（01xx 新增文件型：失败即退；02xx hook 型：漂移告警跳过）
 export PATCH_BEST_EFFORT="${PATCH_BEST_EFFORT:-1}"
