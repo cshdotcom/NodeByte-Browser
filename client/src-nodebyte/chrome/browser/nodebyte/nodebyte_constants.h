@@ -25,6 +25,9 @@ inline constexpr std::string_view kHostSettings = "settings";
 inline constexpr std::string_view kHostUserCenter = "usercenter";
 inline constexpr std::string_view kHostGame = "game";
 inline constexpr std::string_view kHostTranslate = "translate";
+// 办公套件与高级打印面板（提示词 5.11；v1.4.4）
+inline constexpr std::string_view kHostOffice = "office";
+inline constexpr std::string_view kHostPrint = "print";
 
 // 默认同步服务地址（提示词 4.3；设置页展示，策略 CustomLockSyncServer=true 时置灰）
 inline constexpr std::string_view kDefaultSyncServer = "bsync.nodebyte.cn";
@@ -87,6 +90,20 @@ inline constexpr int kUpdateCheckIntervalHours = 24;
 
 // 扩展商店代理下载（走 /api/client/ext-download；关闭则回退直连官方商店）
 inline constexpr std::string_view kPolicyNodeByteExtProxyDownload = "NodeByteExtProxyDownload";
+
+// 办公套件与高级打印（提示词 5.11；与 server/src/lib/policy-defaults.ts 对齐）
+inline constexpr std::string_view kPolicyNodeByteOfficeSuiteEnabled =
+    "NodeByteOfficeSuiteEnabled";
+// Android 仅预览（提示词 5.11.1 平台差异）；策略放开后允许移动端编辑
+inline constexpr std::string_view kPolicyNodeByteOfficeAndroidEdit =
+    "NodeByteOfficeAndroidEdit";
+// 高级打印面板：开启时打印入口优先打开 nodebyte://print（策略可关回原生预览，
+// 亦可通过指令通道运行时切换，无需重编译）
+inline constexpr std::string_view kPolicyNodeBytePrintPanelEnabled =
+    "NodeBytePrintPanelEnabled";
+
+// 办公套件按需加载配置（后台下发，可塑性：跟随 ApiBase）
+inline constexpr std::string_view kApiPathOfficeConfig = "/api/client/office-config";
 
 }  // namespace nodebyte
 

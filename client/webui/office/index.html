@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NodeByte 办公套件 · MD / TXT / DOCX / PPTX / PDF</title>
+<style>
+:root {
+  --bg:#f6f7f9; --card:#fff; --border:#e4e7ec; --text:#1a1d23; --dim:#6b7280;
+  --primary:#2f6bff; --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+  --accent-soft:rgba(47,107,255,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#14161b; --card:#1b1e26; --border:#2a2f3a; --text:#e8eaf0; --dim:#9aa3b2;
+    --primary:#5b8bff; --ok:#4ade80; --warn:#fbbf24; --err:#f87171;
+    --accent-soft:rgba(91,139,255,.18);
+  }
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  background:var(--bg); color:var(--text); min-height:100vh;
+  display:flex; flex-direction:column;
+}
+header {
+  display:flex; align-items:center; gap:12px; padding:12px 18px;
+  border-bottom:1px solid var(--border); background:var(--card); flex-wrap:wrap;
+}
+header .logo { width:30px; height:30px; }
+header h1 { font-size:16px; font-weight:700; }
+header .sub { font-size:11.5px; color:var(--dim); }
+header .spacer { flex:1; }
+.badge {
+  display:inline-block; font-size:10.5px; padding:2px 9px; border-radius:999px;
+  background:var(--accent-soft); color:var(--primary); font-weight:700;
+}
+.badge.gray { background:rgba(107,114,128,.14); color:var(--dim); }
+.btn {
+  padding:7px 14px; border-radius:8px; border:1px solid var(--border);
+  background:transparent; color:var(--text); font-size:12.5px; cursor:pointer;
+  font-weight:500; white-space:nowrap;
+}
+.btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
+.btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn.primary:hover:not(:disabled) { opacity:.9; color:#fff; }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+#dropzone {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:40px 20px; text-align:center;
+}
+#dropzone.drag { background:var(--accent-soft); }
+#dropzone .big { font-size:34px; }
+#dropzone h2 { font-size:19px; font-weight:700; }
+#dropzone p { font-size:13px; color:var(--dim); line-height:1.8; max-width:560px; }
+.tiles { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:6px; }
+.tile {
+  border:1px solid var(--border); border-radius:12px; padding:12px 18px;
+  background:var(--card); font-size:12.5px; color:var(--dim); min-width:104px;
+}
+.tile b { display:block; font-size:14px; color:var(--text); margin-bottom:4px; }
+#editorRoot { flex:1; display:none; flex-direction:column; min-height:0; }
+#toolbar {
+  display:flex; gap:4px; align-items:center; flex-wrap:wrap;
+  padding:8px 12px; border-bottom:1px solid var(--border);
+  background:var(--card); position:sticky; top:0; z-index:5;
+}
+#toolbar .tb {
+  min-width:30px; height:30px; padding:0 8px; border-radius:7px;
+  border:1px solid transparent; background:transparent; color:var(--text);
+  font-size:13px; cursor:pointer; display:inline-flex; align-items:center;
+  justify-content:center; gap:4px;
+}
+#toolbar .tb:hover { border-color:var(--border); background:var(--accent-soft); }
+#toolbar .sep { width:1px; height:20px; background:var(--border); margin:0 5px; }
+#toolbar input[type=color] { width:30px; height:30px; border:none; background:none; cursor:pointer; padding:0; }
+#toolbar input[type=number] {
+  width:56px; height:30px; padding:0 6px; border:1px solid var(--border);
+  border-radius:7px; background:transparent; color:var(--text); font-size:12.5px;
+}
+#statusbar {
+  display:flex; gap:14px; align-items:center; padding:6px 14px;
+  font-size:11.5px; color:var(--dim); border-bottom:1px solid var(--border);
+  background:var(--card); flex-wrap:wrap;
+}
+#statusbar .grow { flex:1; }
+#workspace { flex:1; display:flex; min-height:0; }
+#mdInput {
+  flex:1; resize:none; border:none; outline:none; padding:18px 22px;
+  background:var(--bg); color:var(--text); font:13.5px/1.7 Consolas,'Sarasa Mono SC',monospace;
+  min-width:0;
+}
+#mdPreview, #docView {
+  flex:1; overflow:auto; padding:22px 30px; background:var(--card);
+  border-left:1px solid var(--border); min-width:0; line-height:1.75;
+}
+#mdPreview img, #docView img { max-width:100%; }
+#mdPreview h1,#mdPreview h2,#mdPreview h3 { margin:.7em 0 .4em; }
+#mdPreview p { margin:.45em 0; }
+#mdPreview table, #docView table { border-collapse:collapse; margin:.6em 0; }
+#mdPreview th,#mdPreview td, #docView th,#docView td {
+  border:1px solid var(--border); padding:6px 12px; font-size:13px;
+}
+#mdPreview blockquote, #docView blockquote {
+  border-left:3px solid var(--primary); padding:2px 14px; margin:.6em 0;
+  color:var(--dim); background:var(--accent-soft); border-radius:0 8px 8px 0;
+}
+#mdPreview code { background:var(--accent-soft); padding:1px 6px; border-radius:5px; font-size:12.5px; }
+#mdPreview pre { background:var(--accent-soft); padding:12px 14px; border-radius:9px; overflow:auto; }
+#mdPreview pre code { background:none; padding:0; }
+#docView:focus { outline:none; }
+#docView[contenteditable=true] { box-shadow:inset 0 0 0 2px var(--accent-soft); }
+#slideStage {
+  flex:1; display:none; align-items:center; justify-content:center;
+  background:#0d0f13; overflow:auto; padding:26px;
+}
+.slide {
+  width:960px; max-width:96%; aspect-ratio:16/9; background:#fff; color:#111;
+  position:relative; overflow:hidden; border-radius:6px; flex:none;
+  box-shadow:0 8px 40px rgba(0,0,0,.45);
+}
+.slide .el { position:absolute; overflow:hidden; }
+#slideNav {
+  display:none; gap:8px; align-items:center; justify-content:center;
+  padding:10px; background:var(--card); border-top:1px solid var(--border);
+  flex-wrap:wrap;
+}
+#pdfHolder { flex:1; display:none; }
+#pdfHolder embed, #pdfHolder iframe { width:100%; height:100%; border:none; }
+#toast {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:var(--card); border:1px solid var(--border); border-radius:9px;
+  padding:10px 18px; font-size:13px; box-shadow:0 4px 18px rgba(0,0,0,.08);
+  opacity:0; transition:opacity .2s; pointer-events:none; z-index:99; max-width:80vw;
+}
+#toast.show { opacity:1; }
+.hint { font-size:11.5px; color:var(--dim); line-height:1.6; }
+dialog {
+  border:1px solid var(--border); border-radius:14px; background:var(--card);
+  color:var(--text); padding:22px; max-width:440px; width:92vw;
+}
+dialog::backdrop { background:rgba(0,0,0,.45); }
+dialog h3 { font-size:15px; margin-bottom:12px; }
+dialog .f { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+dialog label { font-size:11.5px; color:var(--dim); font-weight:600; }
+dialog input[type=text], dialog input[type=url], dialog textarea {
+  padding:8px 11px; border:1px solid var(--border); border-radius:8px;
+  background:transparent; color:var(--text); font-size:13px; font-family:inherit;
+  width:100%;
+}
+dialog .row2 { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+#speakerNotes {
+  position:fixed; right:14px; bottom:14px; width:min(360px,42vw);
+  background:var(--card); border:1px solid var(--border); border-radius:12px;
+  padding:14px 16px; font-size:12.5px; line-height:1.7; z-index:50;
+  max-height:44vh; overflow:auto; display:none;
+  box-shadow:0 6px 24px rgba(0,0,0,.18);
+}
+#speakerNotes b { display:block; margin-bottom:6px; color:var(--primary); font-size:11px;
+  text-transform:uppercase; letter-spacing:.05em; }
+@media (max-width:760px) {
+  #workspace { flex-direction:column; }
+  #mdPreview, #docView { border-left:none; border-top:1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M8 30 C 12 12, 36 12, 40 30" stroke="url(#og)" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="14" cy="22" r="2.4" fill="#2f6bff"/>
+    <circle cx="24" cy="16" r="2.4" fill="#5b8bff"/>
+    <circle cx="34" cy="22" r="2.4" fill="#2f6bff"/>
+    <defs><linearGradient id="og" x1="8" y1="30" x2="40" y2="30">
+      <stop stop-color="#2f6bff"/><stop offset="1" stop-color="#5b8bff"/>
+    </linearGradient></defs>
+  </svg>
+  <div>
+    <h1>NodeByte 办公套件</h1>
+    <div class="sub">写作 · 文档 · 演示 · PDF（提示词 5.11）</div>
+  </div>
+  <div class="spacer"></div>
+  <span id="platBadge" class="badge gray"></span>
+  <button class="btn" id="btnOpen">打开文件</button>
+  <button class="btn" id="btnClose" style="display:none">关闭</button>
+  <input type="file" id="fileInput" hidden
+         accept=".md,.markdown,.txt,.log,.docx,.pptx,.pdf">
+</header>
+
+<div id="dropzone">
+  <div class="big">📄</div>
+  <h2>打开或拖入文档</h2>
+  <p>Markdown <b>完整编辑</b>（标题/粗斜体/颜色字号/列表/表格/图片）· TXT 编码自动识别 ·
+     DOCX / PPTX 解析预览（PPT 支持放映、翻页、演讲者视图）· PDF 内核查看器 ·
+     LibreOffice WASM 完整编辑引擎可由后台配置按需加载。</p>
+  <div class="tiles">
+    <div class="tile"><b>MD / TXT</b>读写编辑</div>
+    <div class="tile"><b>DOCX</b>预览 + 轻编辑</div>
+    <div class="tile"><b>PPTX</b>预览 + 放映</div>
+    <div class="tile"><b>PDF</b>内核查看</div>
+  </div>
+  <p class="hint" id="wasmHint"></p>
+</div>
+
+<div id="editorRoot">
+  <div id="toolbar">
+    <button class="tb" data-cmd="h1" title="标题 1">H1</button>
+    <button class="tb" data-cmd="h2" title="标题 2">H2</button>
+    <button class="tb" data-cmd="h3" title="标题 3">H3</button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="bold" title="粗体"><b>B</b></button>
+    <button class="tb" data-cmd="italic" title="斜体"><i>I</i></button>
+    <button class="tb" data-cmd="strike" title="删除线"><s>S</s></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="ul" title="无序列表">•≡</button>
+    <button class="tb" data-cmd="ol" title="有序列表">1≡</button>
+    <button class="tb" data-cmd="quote" title="引用">❝</button>
+    <button class="tb" data-cmd="code" title="行内代码">&lt;/&gt;</button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="table" title="插入表格">▦</button>
+    <button class="tb" data-cmd="link" title="插入链接">🔗</button>
+    <button class="tb" data-cmd="image" title="插入图片">🖼</button>
+    <span class="sep"></span>
+    <input type="number" id="fontSize" min="10" max="32" value="14" title="字号">
+    <input type="color" id="fontColor" value="#1a1d23" title="文字颜色">
+    <span class="sep"></span>
+    <button class="tb" id="btnPreviewMode" title="编辑/分屏/纯预览">预览</button>
+    <button class="tb" id="btnPlay" title="放映（PPTX）" style="display:none">▶ 放映</button>
+    <span class="spacer" style="flex:1"></span>
+    <button class="tb" id="btnWasm" title="按需加载完整编辑引擎" style="display:none">WASM</button>
+    <button class="tb" id="btnSave" title="保存/导出">导出</button>
+  </div>
+  <div id="statusbar">
+    <span id="stName">—</span>
+    <span id="stKind" class="badge gray"></span>
+    <span id="stEnc"></span>
+    <span class="grow"></span>
+    <span id="stCount"></span>
+  </div>
+  <div id="workspace" class="split">
+    <textarea id="mdInput" spellcheck="false"></textarea>
+    <div id="mdPreview"></div>
+    <div id="docView" style="display:none"></div>
+  </div>
+  <div id="slideStage"></div>
+  <div id="pdfHolder"></div>
+  <div id="slideNav">
+    <button class="btn" id="slPrev">◀ 上一页</button>
+    <span id="slIdx" style="font-size:12.5px;min-width:70px;text-align:center"></span>
+    <button class="btn" id="slNext">下一页 ▶</button>
+    <button class="btn" id="slSpeaker">演讲者视图</button>
+    <button class="btn" id="slFull">全屏</button>
+  </div>
+</div>
+
+<dialog id="dlgLink">
+  <h3>插入链接</h3>
+  <div class="f"><label>文字</label><input type="text" id="lkText" placeholder="链接文字"></div>
+  <div class="f"><label>地址</label><input type="text" id="lkUrl" placeholder="https://…"></div>
+  <div class="row2">
+    <button class="btn" id="lkCancel">取消</button>
+    <button class="btn primary" id="lkOk">插入</button>
+  </div>
+</dialog>
+
+<dialog id="dlgTable">
+  <h3>插入表格</h3>
+  <div class="f"><label>行 × 列</label>
+    <input type="text" id="tbSize" value="3 × 4" placeholder="3 × 4"></div>
+  <div class="row2">
+    <button class="btn" id="tbCancel">取消</button>
+    <button class="btn primary" id="tbOk">插入</button>
+  </div>
+</dialog>
+
+<dialog id="dlgExport">
+  <h3 id="exTitle">导出</h3>
+  <p class="hint" id="exNote" style="margin-bottom:12px"></p>
+  <div class="row2">
+    <button class="btn" id="exCancel">取消</button>
+    <button class="btn primary" id="exDo">下载</button>
+  </div>
+</dialog>
+
+<div id="speakerNotes"><b>演讲者视图</b><span id="spText"></span></div>
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -28,6 +28,7 @@ declare -A PATCH_GROUPS=(
   ["0160-nodebyte-extensions"]="chrome/browser/nodebyte/extensions"
   ["0170-nodebyte-import"]="chrome/browser/nodebyte/import"
   ["0180-nodebyte-translate"]="chrome/browser/nodebyte/translate"
+  ["0190-nodebyte-office"]="chrome/browser/nodebyte/office chrome/browser/nodebyte/print chrome/browser/resources/nodebyte"
 )
 
 mkdir -p "${OUT_DIR}"

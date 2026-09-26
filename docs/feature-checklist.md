@@ -99,11 +99,12 @@
 
 | # | 需求 | 状态 | 落点 |
 |---|---|---|---|
-| 1 | MD/DOCX/PPTX/PDF/TXT（WASM 编辑 + PPT 放映；Android 预览） | ⏳ | LibreOffice WASM 编译体量为提示词自认大工程；Drop 在线协作 Office 已可用（Android 预览） |
-| 2 | Windows 定制打印弹窗 / Android 打印增强 | ⏳ | 二期（提示词标注工程量大） |
+| 1 | MD/DOCX/PPTX/PDF/TXT（WASM 编辑 + PPT 放映；Android 预览） | ✅ | **v1.4.4 nodebyte://office**：MD 完整编辑（标题/粗斜/列表/表格/图片/字号颜色）+ TXT 编码识别 + DOCX/PPTX 零依赖解析预览（DOM 构建，DecompressionStream 解压）+ PPT 放映/翻页/演讲者视图 + PDF 内核查看；Android 仅预览（NodeByteOfficeAndroidEdit 可放开）；LibreOffice WASM 完整引擎后台配置 wasmUrl **按需加载**（NodeByteWasmOffice.mount 约定） |
+| 2 | Windows 定制打印弹窗 / Android 打印增强 | ✅ | **v1.4.4 nodebyte://print**：前置面板（页码范围/缩放/边距/多页合一 1-16/小册子骑马钉）+ pdf-kit 本地 PDF 二次处理（Form XObject 原样搬运 + cm 变换链 + ObjStm 展开）→ 系统打印；hook 0240 Print() 入口接管（NodeBytePrintPanelEnabled 门控，关闭回原生）；原生弹窗深度替换标二期（与提示词诚实标注一致） |
 | 3 | 离线小游戏（NodeByte Runner，躲避+道具+最高分） | ✅ | webui/offline-game/game.js + hook 0230 替换 error_page 资源 + 策略键 |
 | 4 | Windows 八浏览器导入（书签/密码/历史/扩展列表） | ✅ | `import/data_importer.{h,cc}` + 原生 importer |
 | 5 | CSV 三类导入（本机 + 管理端 + 个人中心三通道） | ✅ | csv.ts（RFC-4180）+ imports.ts + admin/import + personal/import + sync/imported（表名 user_imported_*） |
+| 6 | nodebyte:// WebUI 注册层（v1.4.4 补缺口） | ✅ | nodebyte_ui_configs.{h,cc} 八主机统一注册（login/drop/settings/translate/game/usercenter/office/print）+ 独立 grd 资源包（0230 引用的 BUILD.gn 目标落地）+ login/drop i18n.js / translate app.js / usercenter 占位补齐 |
 
 ### 5.14 UI/多语言/开发模式 / 5.15 安装程序
 
@@ -201,7 +202,7 @@
 2. **一键登录绑定**（客户端 5.1.6）：站点会话检测 → 绑定弹窗 → 纳入同步集合；
 3. **Cookie 隔离网络层**：ResourceRequest 注入/Set-Cookie 回写（🔴 提示词最高难度，需真实基线联调）；
 4. **Go SFU 媒体转发器**：信令与权限位就绪，转发器未编码；
-5. **Windows 桌面截图辅助 exe / 定制打印弹窗 / LibreOffice WASM 办公编辑器**：提示词自认大工程，二期；
+5. **Windows 桌面截图辅助 exe**：二期；**打印面板与办公套件已于 v1.4.4 落地**（入口接管 + 前置面板 + pdf-kit 本地处理 / 轻量渲染 + WASM 按需加载）；原生打印弹窗深度替换（print_preview UI 层）与 LibreOffice WASM 引擎本体仍属二期/后台配置资源；
 6. **客户端编译产物**：三平台工作流 Fetch/补丁阶段已打通，产物依赖自托管 Runner 或云端长编译完成（🟡）；
 7. **Chromium grd 中英文资源全量**：WebUI i18n 就绪，内核 grd 字符串编译期接入。
 

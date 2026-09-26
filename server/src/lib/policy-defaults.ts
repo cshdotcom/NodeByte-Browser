@@ -71,6 +71,11 @@ export const NODEBYTE_POLICY_DEFAULTS: Record<string, unknown> = {
 
   // ---- 扩展商店代理下载（后端 /api/client/ext-download）----
   NodeByteExtProxyDownload: true,             // 允许经服务器代理下载商店扩展（false 回退直连）
+
+  // ---- 办公套件与高级打印（v1.4.4，提示词 5.11）----
+  NodeByteOfficeSuiteEnabled: true,           // 办公套件总开关（nodebyte://office）
+  NodeByteOfficeAndroidEdit: false,           // 安卓端编辑放开（默认仅预览，平台差异）
+  NodeBytePrintPanelEnabled: true,            // 高级打印面板接管打印入口（关闭回原生）
 };
 
 /** 把 NodeByte 默认值垫底合并进 mandatory（上游显式配置优先） */
@@ -128,5 +133,8 @@ export function summarizeForWeb(m: MergedPolicy): Record<string, unknown> {
     ttsMaxChars: policyNumber(m.mandatory, 'NodeByteTtsMaxChars'),
     updateCheckEnabled: policyBool(m.mandatory, 'NodeByteUpdateCheckEnabled'),
     extProxyDownload: policyBool(m.mandatory, 'NodeByteExtProxyDownload'),
+    officeSuite: policyBool(m.mandatory, 'NodeByteOfficeSuiteEnabled'),
+    officeAndroidEdit: policyBool(m.mandatory, 'NodeByteOfficeAndroidEdit'),
+    printPanel: policyBool(m.mandatory, 'NodeBytePrintPanelEnabled'),
   };
 }

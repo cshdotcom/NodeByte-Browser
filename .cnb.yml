@@ -56,6 +56,9 @@ main:
         - name: 上游服务自检（TTS/更新源/扩展代理 + 可塑性常量；零依赖）
           script:
             - node server/scripts/upstream-selftest.mjs
+        - name: 办公套件与打印自检（配置/策略键/pdf-kit 行为级；零依赖；v1.4.4 新增）
+          script:
+            - node server/scripts/office-print-selftest.mjs
 
   # 手动触发（CNB 网页 → 构建 → web_trigger）：Chromium 全量编译
   # 仅在确有产物需求时手动运行，避免烧核时。

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NodeByte Browser 独立资源 grd（资源隔离铁律：离线游戏、办公套件、打印面板、
+  全部 nodebyte:// 页面静态资源独立成包，内核升级几乎不冲突；提示词 4.2/5.11/5.12）。
+
+  树内路径：chrome/browser/resources/nodebyte/（源文件从仓库 client/webui/ 复制，
+  见同目录 README.md 的映射表；BUILD.gn 目标 //chrome/browser/resources/nodebyte:nodebyte_resources
+  由 hook 0230/0240 引用）。
+-->
+<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
+  <outputs>
+    <output filename="grit/nodebyte_resources.h" type="rc_header"/>
+    <output filename="nodebyte_resources.pak" type="data_package"/>
+  </outputs>
+  <release seq="1">
+    <includes>
+      <!-- nodebyte://login（提示词 5.1） -->
+      <include name="IDR_NODEBYTE_LOGIN_INDEX" file="login/index.html" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_LOGIN_APP" file="login/app.js" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_LOGIN_STYLE" file="login/style.css" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_LOGIN_I18N" file="login/i18n.js" type="BINDATA"/>
+      <!-- nodebyte://drop（提示词 5.4/5.5） -->
+      <include name="IDR_NODEBYTE_DROP_INDEX" file="drop/index.html" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_DROP_APP" file="drop/app.js" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_DROP_STYLE" file="drop/style.css" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_DROP_I18N" file="drop/i18n.js" type="BINDATA"/>
+      <!-- nodebyte://settings（提示词 5.3/5.14） -->
+      <include name="IDR_NODEBYTE_SETTINGS_INDEX" file="settings/index.html" type="BINDATA"/>
+      <!-- nodebyte://translate（翻译面板） -->
+      <include name="IDR_NODEBYTE_TRANSLATE_INDEX" file="translate/index.html" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_TRANSLATE_APP" file="translate/app.js" type="BINDATA"/>
+      <!-- nodebyte://game（离线小游戏，提示词 5.12） -->
+      <include name="IDR_NODEBYTE_GAME_INDEX" file="offline-game/index.html" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_GAME_APP" file="offline-game/game.js" type="BINDATA"/>
+      <!-- nodebyte://usercenter 占位（在线个人中心跳转页） -->
+      <include name="IDR_NODEBYTE_USERCENTER_INDEX" file="usercenter/index.html" type="BINDATA"/>
+      <!-- nodebyte://office（办公套件，提示词 5.11.1；v1.4.4） -->
+      <include name="IDR_NODEBYTE_OFFICE_INDEX" file="office/index.html" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_OFFICE_APP" file="office/app.js" type="BINDATA"/>
+      <!-- nodebyte://print（高级打印面板，提示词 5.11.2/5.11.3；v1.4.4） -->
+      <include name="IDR_NODEBYTE_PRINT_INDEX" file="print/index.html" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_PRINT_APP" file="print/app.js" type="BINDATA"/>
+      <include name="IDR_NODEBYTE_PRINT_PDF_KIT" file="print/pdf-kit.js" type="BINDATA"/>
+    </includes>
+  </release>
+</grit>

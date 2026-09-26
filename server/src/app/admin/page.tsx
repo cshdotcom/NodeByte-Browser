@@ -859,12 +859,15 @@ function UpstreamPanel() {
 
   // ---- 扩展代理 ----
   const [ext, setExt] = useState<{ enabled: boolean; proxyEnabled: boolean; edgeMirror: string; chromeMirror: string } | null>(null);
+  // ---- 办公与打印（v1.4.4）----
+  const [office, setOffice] = useState<{ enabled: boolean; editOnAndroid: boolean; printPanelEnabled: boolean; wasmUrl: string; maxUploadMb: number } | null>(null);
 
   const load = useCallback(async () => {
-    const [a, b, c] = await Promise.all([
+    const [a, b, c, d] = await Promise.all([
       api<{ settings: { enabled: boolean; maxChars: number; auditLog: boolean; defaultVoice: string; defaultFormat: string; providers: TtsRow[] }; meta: Record<string, TtsMeta>; types: string[] }>('/api/admin/tts-config', { headers: bearerHeaders() }),
       api<{ settings: Record<string, unknown> }>('/api/admin/settings', { headers: bearerHeaders() }),
       api<{ settings: Record<string, unknown> }>('/api/admin/settings', { headers: bearerHeaders() }),
+      api<{ settings: { enabled: boolean; editOnAndroid: boolean; printPanelEnabled: boolean; wasmUrl: string; maxUploadMb: number } }>('/api/admin/office-config', { headers: bearerHeaders() }),
     ]);
     if (a.code === 0 && a.data) {
       setTtsCfg(a.data);
@@ -888,15 +891,25 @@ function UpstreamPanel() {
         chromeMirror: (ec.chromeMirror as string) ?? '',
       });
     }
+    if (d.code === 0 && d.data) {
+      setOffice(d.data.settings);
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
-  if (!ttsCfg || !upd || !ext) return <span className="spin" />;
+  if (!ttsCfg || !upd || !ext || !office) return <span className="spin" />;
 
   const meta = ttsCfg.meta ?? {};
 
   const saveSettings = async (key: string, value: unknown, label: string) => {
     const r = await api('/api/admin/settings', { method: 'PATCH', headers: bearerHeaders(), json: { key, value } });
     setMsg(`${label}: ${r.message}`);
+  };
+
+  const saveOffice = async () => {
+    if (!office) return;
+    const r = await api('/api/admin/office-config', { method: 'PUT', headers: bearerHeaders(), json: office });
+    setMsg(`办公与打印配置: ${r.message}`);
+    if (r.code === 0) load();
   };
 
   const saveTts = async () => {
@@ -1089,7 +1102,39 @@ function UpstreamPanel() {
 
       <p className="hint" style={{ marginTop: 10 }}>
         注意：离开本页未保存的修改会丢失。所有上游密钥仅存服务端；客户端只访问本后端 API（跟随同步服务器地址自动切换）。
-      </p>
+      
+      {/* ============ 办公与打印（v1.4.4） ============ */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title">办公套件与高级打印（nodebyte://office / nodebyte://print）</div>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          写作 / 文档 / 演示 / PDF（5.11.1）与高级打印面板（5.11.2/3）在客户端<b>本地离线处理</b>；
+          本后端只下发配置与 WASM 完整引擎地址（按需加载）。对应策略键：<code>NodeByteOfficeSuiteEnabled</code> /
+          <code>NodeByteOfficeAndroidEdit</code>（安卓仅预览）/ <code>NodeBytePrintPanelEnabled</code>。
+        </p>
+        <div className="row" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+          <b>办公套件</b>
+          <button className={`btn btn-sm ${office.enabled ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOffice((c) => (c ? { ...c, enabled: true } : c))}>开启</button>
+          <button className={`btn btn-sm ${!office.enabled ? 'btn-danger' : 'btn-ghost'}`} onClick={() => setOffice((c) => (c ? { ...c, enabled: false } : c))}>关闭</button>
+          <b>安卓编辑</b>
+          <button className={`btn btn-sm ${office.editOnAndroid ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOffice((c) => (c ? { ...c, editOnAndroid: true } : c))}>放开</button>
+          <button className={`btn btn-sm ${!office.editOnAndroid ? 'btn-danger' : 'btn-ghost'}`} onClick={() => setOffice((c) => (c ? { ...c, editOnAndroid: false } : c))}>仅预览</button>
+          <b>打印面板</b>
+          <button className={`btn btn-sm ${office.printPanelEnabled ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setOffice((c) => (c ? { ...c, printPanelEnabled: true } : c))}>接管</button>
+          <button className={`btn btn-sm ${!office.printPanelEnabled ? 'btn-danger' : 'btn-ghost'}`} onClick={() => setOffice((c) => (c ? { ...c, printPanelEnabled: false } : c))}>原生</button>
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <span className="hint">WASM 引擎地址</span>
+          <input className="input mono" style={{ flex: 1, minWidth: 240 }} placeholder="https://…/libreoffice-wasm/（留空 = 不启用按需加载）" value={office.wasmUrl} onChange={(e) => setOffice((c) => (c ? { ...c, wasmUrl: e.target.value } : c))} />
+          <span className="hint">上限 MB</span>
+          <input className="input" style={{ width: 80 }} type="number" value={office.maxUploadMb} onChange={(e) => setOffice((c) => (c ? { ...c, maxUploadMb: Number(e.target.value) || 20 } : c))} />
+          <button className="btn btn-primary btn-sm" onClick={saveOffice}>保存办公与打印</button>
+        </div>
+        <p className="hint" style={{ marginTop: 8 }}>
+          未配置 WASM 时：内置轻量渲染（MD/TXT 完整编辑、DOCX/PPTX 解析预览、PPT 放映与演讲者视图、PDF 内核查看）；
+          配置后办公页出现「按需加载」按钮，DOCX/PPTX 完整编辑引擎从该地址动态加载。
+        </p>
+      </div>
+</p>
     </div>
   );
 }

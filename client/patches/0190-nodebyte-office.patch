@@ -1,0 +1,283 @@
+diff --git a/chrome/browser/nodebyte/office/office_controller.cc b/chrome/browser/nodebyte/office/office_controller.cc
+new file mode 100644
+index 0000000..974375e
+--- /dev/null
++++ b/chrome/browser/nodebyte/office/office_controller.cc
+@@ -0,0 +1,87 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 办公套件控制器实现（提示词 5.11）。
++// 策略/指令读取遵循既有约定：
++//   1) 指令强制值  prefs "nodebyte.directive.forced.<key>"（DirectiveApplier 写入）
++//   2) 编译默认值（见 office_controller.h / policy-defaults.ts 对齐注释）
++//
++// API 基址解析遵循 nodebyte_constants.h「可塑性铁律」注释的三级优先：
++//   指令 NodeByteSyncServerOverride → 用户设置 → 编译默认 kDefaultSyncServer。
++// 【需核实】此处局部实现与 NodeByteProtocol 统一实现（若后续落地）合并。
++
++#include "chrome/browser/nodebyte/office/office_controller.h"
++
++#include "base/strings/string_util.h"
++#include "base/strings/stringprintf.h"
++#include "base/prefs/pref_service.h"
++#include "build/build_config.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/prefs/pref_service.h"
++
++namespace nodebyte {
++
++namespace {
++
++constexpr char kPrefForcedPrefix[] = "nodebyte.directive.forced.";
++
++std::string ResolveApiBase(Profile* profile) {
++  if (!profile) return std::string(kDefaultSyncServer);
++  // 1) 指令覆盖（NodeByteSyncServerOverride，mandatory；撤销即清空回退）
++  const std::string kForced =
++      kPrefForcedPrefix + std::string("NodeByteSyncServerOverride");
++  const std::string& forced = profile->GetPrefs()->GetString(kForced);
++  if (!forced.empty()) return forced;
++  // 2) 用户设置（设置页可改；CustomLockSyncServer 仅影响 UI 置灰）
++  const std::string& user =
++      profile->GetPrefs()->GetString("nodebyte.settings.sync_server");
++  if (!user.empty()) return user;
++  // 3) 编译默认
++  return std::string(kDefaultSyncServer);
++}
++
++}  // namespace
++
++bool OfficeController::IsSuiteEnabled(Profile* profile) {
++  const std::string kKey = kPrefForcedPrefix +
++      std::string(kPolicyNodeByteOfficeSuiteEnabled);
++  // 无指令值 → 默认 true（与 server policy-defaults.ts 对齐）
++  if (!profile || !profile->GetPrefs()->HasPrefPath(kKey)) return true;
++  return profile->GetPrefs()->GetBoolean(kKey);
++}
++
++bool OfficeController::IsAndroidEditAllowed(Profile* profile) {
++#if BUILDFLAG(IS_ANDROID)
++  const std::string kKey = kPrefForcedPrefix +
++      std::string(kPolicyNodeByteOfficeAndroidEdit);
++  if (!profile || !profile->GetPrefs()->HasPrefPath(kKey)) return false;
++  return profile->GetPrefs()->GetBoolean(kKey);
++#else
++  (void)profile;
++  return true;  // 桌面端完整编辑（提示词 5.11.1）
++#endif
++}
++
++std::string OfficeController::PlatformGateJson(Profile* profile) {
++  return base::StringPrintf(
++      R"({"platform":"%s","canEdit":%s,"officeSuite":%s,"syncServer":"%s"})",
++#if BUILDFLAG(IS_ANDROID)
++      "android",
++#else
++      "desktop",
++#endif
++      IsAndroidEditAllowed(profile) ? "true" : "false",
++      IsSuiteEnabled(profile) ? "true" : "false",
++      ResolveApiBase(profile).c_str());
++}
++
++bool OfficeController::CanOpenExtension(const std::string& path) {
++  return base::EndsWith(path, ".md", base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(path, ".markdown", base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(path, ".txt", base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(path, ".docx", base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(path, ".pptx", base::CompareCase::INSENSITIVE_ASCII) ||
++         base::EndsWith(path, ".pdf", base::CompareCase::INSENSITIVE_ASCII);
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/office/office_controller.h b/chrome/browser/nodebyte/office/office_controller.h
+new file mode 100644
+index 0000000..694e2d0
+--- /dev/null
++++ b/chrome/browser/nodebyte/office/office_controller.h
+@@ -0,0 +1,29 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 办公套件控制器（提示词 5.11）：平台门控 + 策略读取 + API 基址注入。
++// 业务全部在 nodebyte://office WebUI（零依赖 JS），C++ 只提供原子能力。
++
++#ifndef CHROME_BROWSER_NODEBYTE_OFFICE_OFFICE_CONTROLLER_H_
++#define CHROME_BROWSER_NODEBYTE_OFFICE_OFFICE_CONTROLLER_H_
++
++#include <string>
++
++class Profile;
++
++namespace nodebyte {
++
++class OfficeController {
++ public:
++  // 总开关（策略 NodeByteOfficeSuiteEnabled / 指令通道可运行时切换）
++  static bool IsSuiteEnabled(Profile* profile);
++  // Android 仅预览（提示词 5.11.1 平台差异）；策略 NodeByteOfficeAndroidEdit 放开
++  static bool IsAndroidEditAllowed(Profile* profile);
++  // 注入给 WebUI 的 window.__NODEBYTE__（platform/canEdit/syncServer）
++  static std::string PlatformGateJson(Profile* profile);
++  // 外部文件打开扩展名白名单（.md/.txt/.docx/.pptx/.pdf）
++  static bool CanOpenExtension(const std::string& path);
++};
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_OFFICE_OFFICE_CONTROLLER_H_
+diff --git a/chrome/browser/nodebyte/print/print_panel.cc b/chrome/browser/nodebyte/print/print_panel.cc
+new file mode 100644
+index 0000000..2104825
+--- /dev/null
++++ b/chrome/browser/nodebyte/print/print_panel.cc
+@@ -0,0 +1,22 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++
++#include "chrome/browser/nodebyte/print/print_panel.h"
++
++#include "components/prefs/pref_service.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/nodebyte/nodebyte_constants.h"
++
++namespace nodebyte {
++
++bool PrintPanelEnabled(Profile* profile) {
++  const std::string kKey =
++      std::string("nodebyte.directive.forced.") +
++      std::string(kPolicyNodeBytePrintPanelEnabled);
++  if (!profile || !profile->GetPrefs() ||
++      !profile->GetPrefs()->HasPrefPath(kKey)) {
++    return true;  // 编译默认：面板为主（提示词 5.11.2 定制打印弹窗语义）
++  }
++  return profile->GetPrefs()->GetBoolean(kKey);
++}
++
++}  // namespace nodebyte
+diff --git a/chrome/browser/nodebyte/print/print_panel.h b/chrome/browser/nodebyte/print/print_panel.h
+new file mode 100644
+index 0000000..d987934
+--- /dev/null
++++ b/chrome/browser/nodebyte/print/print_panel.h
+@@ -0,0 +1,20 @@
++// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++//
++// 高级打印面板入口开关（提示词 5.11.2/5.11.3；hook 0240 的 Print() 重定向读取）。
++//   1) 指令强制值 prefs "nodebyte.directive.forced.NodeBytePrintPanelEnabled"
++//   2) 编译默认 true（面板为主；关闭/撤销即回退原生打印预览，运行时可切换）
++
++#ifndef CHROME_BROWSER_NODEBYTE_PRINT_PRINT_PANEL_H_
++#define CHROME_BROWSER_NODEBYTE_PRINT_PRINT_PANEL_H_
++
++class Profile;
++
++namespace nodebyte {
++
++// NodeBytePrintPanelEnabled：true → 打印入口打开 nodebyte://print 面板；
++// false → 原生打印预览（策略/指令通道可运行时切换，无需重编译）。
++bool PrintPanelEnabled(Profile* profile);
++
++}  // namespace nodebyte
++
++#endif  // CHROME_BROWSER_NODEBYTE_PRINT_PRINT_PANEL_H_
+diff --git a/chrome/browser/resources/nodebyte/BUILD.gn b/chrome/browser/resources/nodebyte/BUILD.gn
+new file mode 100644
+index 0000000..f55454d
+--- /dev/null
++++ b/chrome/browser/resources/nodebyte/BUILD.gn
+@@ -0,0 +1,14 @@
++# Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
++#
++# NodeByte 独立资源 grd 的 gn 目标（资源隔离铁律）。
++# 由 hook 0230（chrome/browser/BUILD.gn）与 hook 0240 引用：
++#   "//chrome/browser/resources/nodebyte:nodebyte_resources"
++
++import("//tools/grit/grit_rule.gni")
++
++grit("nodebyte_resources") {
++  source = "nodebyte_resources.grd"
++  defines = build_flag_defines
++  use_qualified_include = false
++  output_dir = "$root_gen_dir/chrome/browser/resources/nodebyte"
++}
+diff --git a/chrome/browser/resources/nodebyte/README.md b/chrome/browser/resources/nodebyte/README.md
+new file mode 100644
+index 0000000..e184839
+--- /dev/null
++++ b/chrome/browser/resources/nodebyte/README.md
+@@ -0,0 +1,23 @@
++# NodeByte 独立资源包（grd）树内文件映射
++
++构建前把本仓库 `client/webui/` 的页面源码复制进 Chromium 树
++`chrome/browser/resources/nodebyte/`（grd 引用相对路径）。
++复制脚本：`bash scripts/sync_webui.sh /path/to/chromium/src`（构建机执行）。
++
++| 树内文件 | 仓库来源 | 用途 |
++|---|---|---|
++| `login/{index.html,app.js,style.css,i18n.js}` | `client/webui/login/` | nodebyte://login（5.1） |
++| `drop/{index.html,app.js,style.css,i18n.js}` | `client/webui/drop/` | nodebyte://drop（5.4/5.5） |
++| `settings/index.html` | `client/webui/settings/` | nodebyte://settings（5.3/5.14） |
++| `translate/{index.html,app.js}` | `client/webui/translate/` | nodebyte://translate |
++| `offline-game/{index.html,game.js}` | `client/webui/offline-game/` | nodebyte://game + 断网错误页（5.12） |
++| `usercenter/index.html` | `client/webui/usercenter/` | nodebyte://usercenter 跳转占位 |
++| `office/{index.html,app.js}` | `client/webui/office/` | nodebyte://office（5.11.1，v1.4.4） |
++| `print/{index.html,app.js,pdf-kit.js}` | `client/webui/print/` | nodebyte://print（5.11.2/3，v1.4.4） |
++| `nodebyte_resources.grd` / `BUILD.gn` | 本目录直接维护 | grit 定义与目标 |
++
++注意：
++- `IDR_NODEBYTE_*` 常量由 grit 生成到 `grit/nodebyte_resources.h`，
++  控制器（chrome/browser/ui/webui/nodebyte/）include 该生成头。
++- translate/app.js 若尚未存在则以 index.html 内联脚本为准（grd 仅登记存在的文件）。
++- usercenter/index.html 为占位跳转页（在线个人中心，v1.4.x 交付语义）。
+diff --git a/chrome/browser/resources/nodebyte/nodebyte_resources.grd b/chrome/browser/resources/nodebyte/nodebyte_resources.grd
+new file mode 100644
+index 0000000..dbc59c7
+--- /dev/null
++++ b/chrome/browser/resources/nodebyte/nodebyte_resources.grd
+@@ -0,0 +1,46 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++  NodeByte Browser 独立资源 grd（资源隔离铁律：离线游戏、办公套件、打印面板、
++  全部 nodebyte:// 页面静态资源独立成包，内核升级几乎不冲突；提示词 4.2/5.11/5.12）。
++
++  树内路径：chrome/browser/resources/nodebyte/（源文件从仓库 client/webui/ 复制，
++  见同目录 README.md 的映射表；BUILD.gn 目标 //chrome/browser/resources/nodebyte:nodebyte_resources
++  由 hook 0230/0240 引用）。
++-->
++<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
++  <outputs>
++    <output filename="grit/nodebyte_resources.h" type="rc_header"/>
++    <output filename="nodebyte_resources.pak" type="data_package"/>
++  </outputs>
++  <release seq="1">
++    <includes>
++      <!-- nodebyte://login（提示词 5.1） -->
++      <include name="IDR_NODEBYTE_LOGIN_INDEX" file="login/index.html" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_LOGIN_APP" file="login/app.js" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_LOGIN_STYLE" file="login/style.css" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_LOGIN_I18N" file="login/i18n.js" type="BINDATA"/>
++      <!-- nodebyte://drop（提示词 5.4/5.5） -->
++      <include name="IDR_NODEBYTE_DROP_INDEX" file="drop/index.html" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_DROP_APP" file="drop/app.js" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_DROP_STYLE" file="drop/style.css" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_DROP_I18N" file="drop/i18n.js" type="BINDATA"/>
++      <!-- nodebyte://settings（提示词 5.3/5.14） -->
++      <include name="IDR_NODEBYTE_SETTINGS_INDEX" file="settings/index.html" type="BINDATA"/>
++      <!-- nodebyte://translate（翻译面板） -->
++      <include name="IDR_NODEBYTE_TRANSLATE_INDEX" file="translate/index.html" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_TRANSLATE_APP" file="translate/app.js" type="BINDATA"/>
++      <!-- nodebyte://game（离线小游戏，提示词 5.12） -->
++      <include name="IDR_NODEBYTE_GAME_INDEX" file="offline-game/index.html" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_GAME_APP" file="offline-game/game.js" type="BINDATA"/>
++      <!-- nodebyte://usercenter 占位（在线个人中心跳转页） -->
++      <include name="IDR_NODEBYTE_USERCENTER_INDEX" file="usercenter/index.html" type="BINDATA"/>
++      <!-- nodebyte://office（办公套件，提示词 5.11.1；v1.4.4） -->
++      <include name="IDR_NODEBYTE_OFFICE_INDEX" file="office/index.html" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_OFFICE_APP" file="office/app.js" type="BINDATA"/>
++      <!-- nodebyte://print（高级打印面板，提示词 5.11.2/5.11.3；v1.4.4） -->
++      <include name="IDR_NODEBYTE_PRINT_INDEX" file="print/index.html" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_PRINT_APP" file="print/app.js" type="BINDATA"/>
++      <include name="IDR_NODEBYTE_PRINT_PDF_KIT" file="print/pdf-kit.js" type="BINDATA"/>
++    </includes>
++  </release>
++</grit>

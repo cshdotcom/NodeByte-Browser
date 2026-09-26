@@ -1,0 +1,14 @@
+# Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
+#
+# NodeByte 独立资源 grd 的 gn 目标（资源隔离铁律）。
+# 由 hook 0230（chrome/browser/BUILD.gn）与 hook 0240 引用：
+#   "//chrome/browser/resources/nodebyte:nodebyte_resources"
+
+import("//tools/grit/grit_rule.gni")
+
+grit("nodebyte_resources") {
+  source = "nodebyte_resources.grd"
+  defines = build_flag_defines
+  use_qualified_include = false
+  output_dir = "$root_gen_dir/chrome/browser/resources/nodebyte"
+}

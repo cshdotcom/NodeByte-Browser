@@ -117,6 +117,16 @@ VMess/VLESS/Trojan/SS 经本地 Xray 方案 B + 订阅链接）。
 
 见 docs/translate.md（开源多供应商：LibreTranslate / Lingva / MyMemory / DeepLX）。
 
+## 办公套件与高级打印（v1.4.4）
+
+| 键 | 类型 | 执行点 |
+|---|---|---|
+| `NodeByteOfficeSuiteEnabled` | bool | 办公套件总开关（nodebyte://office 写作/文档/演示/PDF；关闭隐藏入口） |
+| `NodeByteOfficeAndroidEdit` | bool | 安卓端编辑放开（默认 false = 仅预览，提示词 5.11.1 平台差异） |
+| `NodeBytePrintPanelEnabled` | bool | 高级打印面板接管 Print() 入口（nodebyte://print；关闭回退原生打印预览） |
+
+见 docs/office-print.md（办公套件能力矩阵 / pdf-kit 本地处理 / WASM 按需加载）。
+
 ## 五、策略指令（下发 / 撤销，v1.3.0）★
 
 在三层策略（全局 < 用户组 < 用户 override）之上新增**指令**通道，作用域支持
@@ -146,7 +156,7 @@ global / group / user，按 valueType 四类语义下发与撤销：
 
 ### 5.3 注册表
 
-服务端 `server/src/lib/directive-registry.ts`（39 个常用键 + 默认值 + 高危标记），
+服务端 `server/src/lib/directive-registry.ts`（51 个常用键 + 默认值 + 高危标记），
 客户端 `directive_applier.cc` SwitchDefaultForKey 对齐；未知键允许下发，
 按 text 语义撤销。高危开关（如 CustomDisableRendererSandbox）开启需二次确认
 （`confirmHighRisk: true`）并写审计。

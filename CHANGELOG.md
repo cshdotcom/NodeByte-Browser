@@ -7,6 +7,52 @@
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-09-26
+
+### Added（办公套件 + 高级打印端到端落地 + nodebyte:// WebUI 注册缺口补齐）
+
+- **背景**：用户三问「写作功能在不在 / Office 嵌了没 / 打印搞了没」——逐项核对确认
+  三项均为未实现状态（feature-checklist 5.11 前两项 ⏳），本轮端到端补齐。
+- **办公套件 nodebyte://office（提示词 5.11.1）**：
+  - Markdown **完整编辑**：标题/粗体/斜体/删除线/列表/引用/行内代码/表格/链接/图片插入
+    （base64 内嵌随 .md 保存）/字号/颜色 + 分屏实时预览 + 导出 .md/.html；
+  - TXT 完整编辑 + **编码自动识别**（UTF-8/UTF-16/GB18030/Big5/Shift_JIS/Windows-1252 启发式打分）；
+  - DOCX **解析预览 + 轻编辑**（段落/标题样式/字符样式/列表/表格/图片 rels 映射，导出 .html）；
+  - PPTX **解析预览 + 放映**（EMU→百分比定位，全屏/键盘翻页/**演讲者视图备注**）；
+  - PDF 内核查看器（PDFium 原生查看/旋转/另存）；
+  - **零第三方依赖**：OOXML 解压用 `DecompressionStream('deflate-raw')`，文档渲染一律 DOM 构建
+    （不 innerHTML 装载不可信 XML，XSS 面收敛为零）；
+  - **平台门控**：Android 仅预览（提示词平台差异；策略 `NodeByteOfficeAndroidEdit` 可放开），
+    C++ 注入 `window.__NODEBYTE__`（platform/canEdit/syncServer）；
+  - **LibreOffice WASM 按需加载**（提示词「体积大，可内置按需加载」）：后台配置 `wasmUrl`
+    → 办公页「WASM」按钮动态加载完整编辑引擎（约定 `NodeByteWasmOffice.mount`），未配置时轻量渲染照常。
+- **高级打印 nodebyte://print（提示词 5.11.2/5.11.3）**：
+  - 前置面板：页码范围（`1-5,8`）/ 缩放 25–400% / 边距 mm / **多页合一**（1/2/4/6/9/16）/
+    **小册子**（骑马钉排序 [8,1][2,7][6,3][4,5] + 双面沿短边翻页提示）；
+  - **pdf-kit 零依赖 PDF 页面级处理引擎**：源页内容流原样字节搬运为 Form XObject（不重编码），
+    cm 变换链（归一化→/Rotate 显式矩阵→缩放→摆放）排版，原文档对象原样携带（引用天然有效），
+    重建经典 xref；支持 ObjStm 压缩对象流自动展开与 /Length 精确定界；输出可被引擎二次解析（往返稳定）；
+  - hook 0240：`Print(Browser*)` 入口接管（`NodeBytePrintPanelEnabled` 门控，
+    关闭/指令撤销即回退原生打印预览，运行时可切换无需重编译）；
+    原生弹窗深度替换（print_preview UI 层）按提示词诚实标注为二期。
+- **nodebyte:// WebUI 注册缺口补齐（v1.4.3 复核发现）**：
+  - `nodebyte_ui_configs.{h,cc}` 为 **login/drop/settings/translate/game/usercenter/office/print
+    八主机**统一注册 WebUIConfig + WebUIDataSource；
+  - 独立 grd 资源包落地（`resources/nodebyte/{nodebyte_resources.grd,BUILD.gn}`——
+    hook 0230 引用的 `//chrome/browser/resources/nodebyte:nodebyte_resources` 目标首次真实存在）；
+  - 补齐 login/drop `i18n.js`、translate `app.js`、usercenter 占位页。
+- **服务端**：
+  - `lib/office.ts`（validate/clientView）+ `GET /api/client/office-config`（公开、无敏感字段）
+    + `GET/PUT /api/admin/office-config`（authAdmin + 审计）；
+  - 策略三键：`NodeByteOfficeSuiteEnabled` / `NodeByteOfficeAndroidEdit` / `NodeBytePrintPanelEnabled`
+    （policy-defaults + 指令注册表 + summarizeForWeb）；
+  - 后台「上游服务」面板新增**办公与打印**卡片（三开关 + WASM 地址 + 保存）。
+- **自测与 CI**：`office-print-selftest.mjs` 46 项零依赖（含 pdf-kit 行为级：范围/多页合一/
+  小册子/边距缩放/Flate 搬运/往返稳定）接入 `.cnb.yml` lite-validate 与 GitHub server-ci；
+  本地预检 tsc 0 错 / standalone 构建通过 / 11 个新增文件型补丁干跑全过。
+- **CNB 编译额度保护**：全部客户端改动走补丁（干跑验证），**未触发 web_trigger**；
+  hook 0240 三处内核签名按惯例标注【需核实】，均带策略门控与原生回退。
+
 ## [1.4.3] - 2026-09-26
 
 ### Added（两份提示词逐项校对轮：补齐翻译矩阵缺口 + 编译默认搜索引擎常量）

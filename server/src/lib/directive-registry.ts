@@ -86,6 +86,11 @@ export const DIRECTIVE_REGISTRY: Record<string, DirectiveMeta> = {
   NodeByteUpdateCheckEnabled: { label: '允许客户端检查更新', valueType: 'switch', defaultValue: true },
   NodeByteExtProxyDownload: { label: '扩展商店经服务器代理下载', valueType: 'switch', defaultValue: true },
 
+  // ---- 办公套件与高级打印（v1.4.4）----
+  NodeByteOfficeSuiteEnabled: { label: '办公套件（nodebyte://office 写作/文档/演示/PDF）', valueType: 'switch', defaultValue: true },
+  NodeByteOfficeAndroidEdit: { label: '安卓端办公编辑放开（默认仅预览）', valueType: 'switch', defaultValue: false },
+  NodeBytePrintPanelEnabled: { label: '高级打印面板接管打印入口（关闭回原生）', valueType: 'switch', defaultValue: true },
+
   // ---- 地址 / 文本类 ----
   HomepageLocation: { label: '主页地址', valueType: 'text', defaultValue: '' },
   NodeByteSyncServerOverride: { label: '同步服务器地址（下发覆盖）', valueType: 'text', defaultValue: '' },
