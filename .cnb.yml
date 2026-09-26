@@ -13,8 +13,6 @@ main:
     - name: nodebyte-lite-validate
       docker:
         image: node:20-bookworm
-        volumes:
-          - /root/.npm-cache:/root/.npm
       stages:
         - name: 环境自检
           script:
@@ -74,8 +72,7 @@ main:
       stages:
         - name: 构建开始标记（推 tag ci-build-start-<sha> 供外部监控）
           script:
-            - TAG=ci-build-start-$(git rev-parse --short HEAD)
-            - git tag -f $TAG && git push -q "https://cnb:${CNB_TOKEN:-}@cnb.cool/nodebyte-browser/NodeByte-Browser.git" refs/tags/$TAG || echo "WARN: marker push failed"
+            - git tag -f "ci-build-start-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-start-$(git rev-parse --short HEAD)" || echo "WARN_MARKER_PUSH_FAILED"
         - name: 预检（磁盘/内存不足立即失败，不进入长编译）
           script:
             - bash client/scripts/ci_precheck.sh
@@ -84,8 +81,7 @@ main:
             - bash client/scripts/ci_build_all.sh
         - name: 成功标记（推 tag ci-build-ok-<sha>）
           script:
-            - TAG=ci-build-ok-$(git rev-parse --short HEAD)
-            - git tag -f $TAG && git push -q "https://cnb:${CNB_TOKEN:-}@cnb.cool/nodebyte-browser/NodeByte-Browser.git" refs/tags/$TAG || echo "WARN: ok marker push failed"
+            - git tag -f "ci-build-ok-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-ok-$(git rev-parse --short HEAD)" || echo "WARN_OK_MARKER_PUSH_FAILED"
 
 # 专用编译分支：push 到 chromium-build 分支 = 触发全量编译（v1.4.5 新增；
 # 令牌无 repo-cnb-trigger 权限时的等效手动触发通道，与 web_trigger 同一构建定义）。
@@ -99,8 +95,7 @@ chromium-build:
       stages:
         - name: 构建开始标记（推 tag ci-build-start-<sha> 供外部监控）
           script:
-            - TAG=ci-build-start-$(git rev-parse --short HEAD)
-            - git tag -f $TAG && git push -q "https://cnb:${CNB_TOKEN:-}@cnb.cool/nodebyte-browser/NodeByte-Browser.git" refs/tags/$TAG || echo "WARN: marker push failed"
+            - git tag -f "ci-build-start-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-start-$(git rev-parse --short HEAD)" || echo "WARN_MARKER_PUSH_FAILED"
         - name: 预检（磁盘/内存不足立即失败，不进入长编译）
           script:
             - bash client/scripts/ci_precheck.sh
@@ -109,8 +104,7 @@ chromium-build:
             - bash client/scripts/ci_build_all.sh
         - name: 成功标记（推 tag ci-build-ok-<sha>）
           script:
-            - TAG=ci-build-ok-$(git rev-parse --short HEAD)
-            - git tag -f $TAG && git push -q "https://cnb:${CNB_TOKEN:-}@cnb.cool/nodebyte-browser/NodeByte-Browser.git" refs/tags/$TAG || echo "WARN: ok marker push failed"
+            - git tag -f "ci-build-ok-$(git rev-parse --short HEAD)" && git push -q origin "refs/tags/ci-build-ok-$(git rev-parse --short HEAD)" || echo "WARN_OK_MARKER_PUSH_FAILED"
 
 # 全局事件（不区分分支）：api_trigger 供 CNB API POST /{repo}/-/build/start
 # （event=api_trigger）编程触发，与 web_trigger 同一构建定义（v1.4.5 新增）。
