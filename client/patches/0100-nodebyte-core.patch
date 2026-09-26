@@ -1,9 +1,9 @@
 diff --git a/chrome/browser/nodebyte/nodebyte_constants.h b/chrome/browser/nodebyte/nodebyte_constants.h
 new file mode 100644
-index 0000000..6e56776
+index 0000000..162d82a
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_constants.h
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,93 @@
 +// Copyright 2026 The NodeByte Browser Authors. BSD-3-Clause.
 +//
 +// NodeByte Browser 客户端常量定义。
@@ -34,6 +34,11 @@ index 0000000..6e56776
 +
 +// 默认同步服务地址（提示词 4.3；设置页展示，策略 CustomLockSyncServer=true 时置灰）
 +inline constexpr std::string_view kDefaultSyncServer = "bsync.nodebyte.cn";
++
++// 编译默认搜索引擎（客户端提示词 4.5/12：必应；策略/指令可覆盖并锁定，
++// 撤销后由 DirectiveApplier/TemplateURLService 恢复到此默认）。
++inline constexpr std::string_view kDefaultSearchEngineName = "Bing";
++inline constexpr std::string_view kDefaultSearchURL = "https://cn.bing.com/search?q={searchTerms}";
 +
 +// 关于页标注（提示词 4.4）
 +inline constexpr std::string_view kChromiumAttribution =

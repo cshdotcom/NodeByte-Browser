@@ -1,5 +1,5 @@
 /**
- * 翻译引擎（15 种常用翻译 API 统一适配 + 自动降级 + 后台可配）
+ * 翻译引擎（18 种常用翻译 API 统一适配 + 自动降级 + 后台可配）
  * =====================================================================
  * 架构（用户确认）：浏览器只连 NodeByte 后端 → 后端按「后台翻译配置」的
  * provider 顺序连接上游翻译接口。客户端永远拿不到上游地址与密钥。
@@ -36,6 +36,10 @@
  *   15 openai_compat   按量付费   OpenAI 兼容 LLM 翻译（ChatGPT/DeepSeek/Ollama/vLLM，
  *                                 endpoint+key+model，效果最好、可自托管本地模型）
  *
+ *   —— 追加（v1.4.3，逐项校对补齐用户点名缺口）——
+ *   16 papago          每日免费   Papago 翻译（Naver，X-Naver-Client-ID/Secret 双头鉴权）
+ *   17 volcengine      200万/月   火山引擎翻译（字节跳动，Volcengine V4 HMAC-SHA256 签名链）
+ *   18 caiyun          100万/月   彩云小译（X-Authorization token，trans_type src2tgt）
  * 各家语言代码不同（zh-CN vs zh vs ZH vs zh-CHS...），per-provider 映射见 LANG_MAPS。
  * 全部零第三方依赖（crypto 用 node:crypto）。
  */
@@ -51,7 +55,8 @@ export type ProviderType =
   | 'google_free' | 'edge_free'
   | 'deepl' | 'microsoft' | 'baidu' | 'youdao'
   | 'tencent' | 'aliyun' | 'niutrans' | 'yandex'
-  | 'openai_compat';
+  | 'openai_compat'
+  | 'papago' | 'volcengine' | 'caiyun';
 
 export const ALL_PROVIDER_TYPES: readonly ProviderType[] = [
   'libretranslate', 'lingva', 'mymemory', 'deeplx',
@@ -59,6 +64,7 @@ export const ALL_PROVIDER_TYPES: readonly ProviderType[] = [
   'deepl', 'microsoft', 'baidu', 'youdao',
   'tencent', 'aliyun', 'niutrans', 'yandex',
   'openai_compat',
+  'papago', 'volcengine', 'caiyun',
 ];
 
 /** 后台 UI 渲染凭据字段所需元信息 */
@@ -86,6 +92,9 @@ export const PROVIDER_META: Record<ProviderType, {
   niutrans:       { label: '小牛翻译 Niutrans', license: '免费额度', keyShape: 'apiKey', defaultEndpoint: 'https://api.niutrans.com', freeTier: '100 万字/月免费' },
   yandex:         { label: 'Yandex Translate', license: '免费额度', keyShape: 'apiKey', defaultEndpoint: 'https://translate.yandex.net', freeTier: '注册即赠 100 万字' },
   openai_compat:  { label: 'OpenAI 兼容 LLM（ChatGPT/DeepSeek/Ollama…）', license: '按量付费/本地自托管', keyShape: 'keyModel', defaultEndpoint: 'https://api.deepseek.com/v1', freeTier: 'DeepSeek 低至 1 元/百万 token；本地 Ollama 免费' },
+  papago:         { label: 'Papago 翻译（Naver）', license: 'Naver Developers', keyShape: 'appIdKey', defaultEndpoint: 'https://openapi.naver.com', freeTier: '每日 1 万字符免费（韩/英/日/中最优）' },
+  volcengine:     { label: '火山引擎翻译（字节跳动）', license: '火山引擎免费额度', keyShape: 'appIdKey', defaultEndpoint: 'https://open.volcengineapi.com', freeTier: '每月 200 万字符免费（以官方为准）' },
+  caiyun:         { label: '彩云小译（Caiyun）', license: '免费版额度', keyShape: 'apiKey', defaultEndpoint: 'https://api.interpreter.caiyunai.com', freeTier: '免费版每月 100 万字符（中英日见长）' },
 };
 
 export interface ProviderConfig {
@@ -204,6 +213,12 @@ const LANG_MAPS: Partial<Record<ProviderType, (code: string, role: 'source' | 't
   edge_free: (c) => (c === 'zh-CN' ? 'zh-Hans' : c === 'zh-TW' ? 'zh-Hant' : c),
   // Yandex：zh
   yandex: (c) => (c === 'zh-CN' ? 'zh' : c),
+  // Papago：ko/en/ja/zh-CN/zh-TW/vi/th/id/es/pt/ru（简繁带地区号，恒等映射即可）
+  papago: (c) => c,
+  // 火山引擎：标准 ISO 码，zh-CN → zh
+  volcengine: (c) => (c === 'zh-CN' ? 'zh' : c),
+  // 彩云小译：trans_type 为 src2tgt（en2zh / auto2zh）；主要支持 zh/en/ja/ko/es/fr/ru
+  caiyun: (c) => (c === 'zh-CN' || c === 'zh-TW' ? 'zh' : c),
   // openai_compat：直接把语言显示名塞进 prompt，无需映射
 };
 
@@ -546,6 +561,102 @@ async function adYandex(cfg: ProviderConfig, req: TranslateRequest): Promise<Tra
   return { translatedText: t, detectedSource: d.detected?.lang, provider: 'yandex', endpoint: base, cached: false };
 }
 
+/** Papago 翻译（Naver Developers：X-Naver-Client-ID + X-Naver-Client-Secret 双头） */
+async function adPapago(cfg: ProviderConfig, req: TranslateRequest): Promise<TranslateResult> {
+  if (!cfg.appId || !cfg.apiKey) throw new Error('缺少 Client-ID / Client-Secret（Papago）');
+  const base = ep(cfg, PROVIDER_META.papago.defaultEndpoint);
+  const r = await fetchWithTimeout(`${base.replace(/\/$/, '')}/v1/papago/n2mt`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Naver-Client-ID': cfg.appId,
+      'X-Naver-Client-Secret': cfg.apiKey,
+    },
+    body: new URLSearchParams({
+      source: req.source && req.source !== 'auto' ? toLang('papago', req.source, 'source') : 'auto',
+      target: toLang('papago', req.target, 'target'),
+      text: req.text,
+    }).toString(),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${r.status === 401 ? '(Client-ID/Secret 无效)' : ''}`);
+  const d = await r.json() as { message?: { result?: { translatedText?: string; srcLangType?: string } }; errorCode?: string };
+  const t = d.message?.result?.translatedText;
+  if (!t) throw new Error(d.errorCode ? `Papago 错误 ${d.errorCode}` : 'empty response');
+  return { translatedText: t, detectedSource: d.message?.result?.srcLangType, provider: 'papago', endpoint: base, cached: false };
+}
+
+/** 火山引擎翻译（Volcengine V4 签名：HMAC-SHA256 链 kDate→kRegion→kService→kSigning，零依赖） */
+async function adVolcengine(cfg: ProviderConfig, req: TranslateRequest): Promise<TranslateResult> {
+  if (!cfg.appId || !cfg.apiKey) throw new Error('缺少 AccessKeyId / SecretKey（火山引擎）');
+  const base = ep(cfg, PROVIDER_META.volcengine.defaultEndpoint);
+  const host = base.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const service = 'translate';
+  const region = 'cn-north-1';
+  const xDate = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');  // YYYYMMDDTHHMMSSZ
+  const date = xDate.slice(0, 8);
+
+  const payload = JSON.stringify({
+    SourceLanguage: req.source && req.source !== 'auto' ? toLang('volcengine', req.source, 'source') : 'auto',
+    TargetLanguage: toLang('volcengine', req.target, 'target'),
+    Text: req.text,
+  });
+  const query = `Action=TranslateText&Version=2020-06-01`;
+  const hashedPayload = createHash('sha256').update(payload).digest('hex');
+  const canonicalHeaders = `content-type:application/json\nhost:${host}\nx-content-sha256:${hashedPayload}\nx-date:${xDate}\n`;
+  const signedHeaders = 'content-type;host;x-content-sha256;x-date';
+  const canonicalRequest = `POST\n/\n${query}\n${canonicalHeaders}\n${signedHeaders}\n${hashedPayload}`;
+  const stringToSign = `HMAC4-SHA256\n${xDate}\n${date}/${region}/${service}/request\n${createHash('sha256').update(canonicalRequest).digest('hex')}`;
+
+  const kDate = createHmac('sha256', cfg.apiKey).update(date).digest();
+  const kRegion = createHmac('sha256', kDate).update(region).digest();
+  const kService = createHmac('sha256', kRegion).update(service).digest();
+  const kSigning = createHmac('sha256', kService).update('request').digest();
+  const signature = createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+
+  const r = await fetchWithTimeout(`https://${host}/?${query}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Host: host,
+      'X-Content-Sha256': hashedPayload,
+      'X-Date': xDate,
+      Authorization: `HMAC4-SHA256 Credential=${cfg.appId}/${date}/${region}/${service}/request, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+    },
+    body: payload,
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${r.status === 401 || r.status === 403 ? '(AK/SK 或签名无效)' : ''}`);
+  const d = await r.json() as { Result?: { Translation?: string; SourceLanguage?: string }; Translation?: string; ResponseMetadata?: { Error?: { Code?: string; Message?: string } } };
+  if (d.ResponseMetadata?.Error) throw new Error(`火山引擎错误 ${d.ResponseMetadata.Error.Code}: ${d.ResponseMetadata.Error.Message ?? ''}`);
+  const t = d.Result?.Translation ?? d.Translation;
+  if (!t) throw new Error('empty response');
+  return { translatedText: t, detectedSource: d.Result?.SourceLanguage, provider: 'volcengine', endpoint: base, cached: false };
+}
+
+/** 彩云小译（X-Authorization: token；trans_type 形如 auto2zh / en2ja） */
+async function adCaiyun(cfg: ProviderConfig, req: TranslateRequest): Promise<TranslateResult> {
+  if (!cfg.apiKey) throw new Error('缺少 apiKey（彩云小译 Token）');
+  const base = ep(cfg, PROVIDER_META.caiyun.defaultEndpoint);
+  const src = req.source && req.source !== 'auto' ? toLang('caiyun', req.source, 'source') : 'auto';
+  const r = await fetchWithTimeout(`${base.replace(/\/$/, '')}/v1/translator`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Authorization': `token ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      source: [req.text],
+      trans_type: `${src}2${toLang('caiyun', req.target, 'target')}`,
+      request_id: randomUUID(),
+      detect: src === 'auto',
+    }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${r.status === 401 ? '(token 无效或额度耗尽)' : ''}`);
+  const d = await r.json() as { target?: string[]; confidence?: number; rc?: number };
+  const t = d.target?.[0];
+  if (!t) throw new Error('empty response');
+  return { translatedText: t, provider: 'caiyun', endpoint: base, cached: false };
+}
+
 /** OpenAI 兼容 LLM 翻译（ChatGPT / DeepSeek / Ollama / vLLM / 各类中转） */
 async function adOpenAICompat(cfg: ProviderConfig, req: TranslateRequest): Promise<TranslateResult> {
   if (!cfg.apiKey && !/localhost|127\.0\.0\.1|ollama/i.test(ep(cfg, PROVIDER_META.openai_compat.defaultEndpoint))) {
@@ -598,6 +709,9 @@ const ADAPTERS: Record<ProviderType, (cfg: ProviderConfig, req: TranslateRequest
   niutrans: adNiutrans,
   yandex: adYandex,
   openai_compat: adOpenAICompat,
+  papago: adPapago,
+  volcengine: adVolcengine,
+  caiyun: adCaiyun,
 };
 
 // ---------------------------------------------------------------------

@@ -78,18 +78,18 @@
 `/api/admin/audit`、`/api/admin/settings`、`/api/admin/stats`、`/api/admin/bootstrap`、
 `/api/admin/translate-config`（**GET/PUT 翻译配置：开关/自托管实例/缓存 TTL/审计/默认目标语言**）。
 
-### 2.7 翻译（15 种常用 API 全矩阵）
+### 2.7 翻译（18 种常用 API 全矩阵）
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/translate` | 语言列表 + 当前 providers（脱敏）+ 默认目标语言 |
 | POST | `/api/translate` | `{ text, source?, target, format? }` → `{ translatedText, detectedSource?, provider, endpoint, cached }`；登录用户可用，单次 ≤ `NodeByteTranslateMaxChars` |
-| GET/PUT | `/api/admin/translate-config` | 后台翻译配置（15 种 provider + 凭据 + 权重 + 启用；密钥回显脱敏、留空保存保留原密钥） |
+| GET/PUT | `/api/admin/translate-config` | 后台翻译配置（18 种 provider + 凭据 + 权重 + 启用；密钥回显脱敏、留空保存保留原密钥） |
 | POST | `/api/admin/translate-test` | 管理员一键测试单条接口配置 → `{ ok, detail, sample?, latencyMs? }` |
 
 **架构**：浏览器只访问本后端 `/api/translate` → 后端按「后台翻译配置」顺序连接上游 → 密钥仅存服务端。
 **默认梯队（免 Key，实测可用性排序）**：`google_free`（Google 免费端点，✅ 实测）→ `edge_free`（Edge 匿名 JWT）→ `mymemory`（✅ 实测）；
 **可添加**：`libretranslate` / `lingva` / `deeplx`（自托管）、`deepl` / `microsoft` / `baidu` / `youdao` / `tencent`（TC3 签名）/
-`aliyun`（SHA1 RPC 签名）/ `niutrans` / `yandex` / `openai_compat`（LLM：DeepSeek/Ollama 等，共 15 种）。
+`aliyun`（SHA1 RPC 签名）/ `niutrans` / `yandex` / `openai_compat`（LLM：DeepSeek/Ollama 等）/ `papago`（Naver 双头）/ `volcengine`（火山引擎 HMAC4 V4 签名）/ `caiyun`（彩云小译 token），共 18 种。
 一条失败自动降级下一条；缓存命中直接返回。详见 docs/translate.md。
 
 ### 2.8 上游服务（v1.4.2：先连后端 → 后台配置 → 上游）

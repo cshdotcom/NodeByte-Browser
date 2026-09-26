@@ -7,6 +7,28 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-09-26
+
+### Added（两份提示词逐项校对轮：补齐翻译矩阵缺口 + 编译默认搜索引擎常量）
+
+- **逐项校对结论**：对《客户端源码开发提示词》（682 行）与《服务端后台开发提示词》（731 行）
+  共 85 个校验点用脚本逐条对照代码证据重新核验（docs/feature-checklist.md 全面重写）。
+- **翻译矩阵 15 → 18 种**（补齐首轮点名但未收录的三家）：
+  - `papago`：Naver Developers，X-Naver-Client-ID/Secret 双头，每日 1 万字符免费；
+  - `volcengine`：火山引擎翻译（字节跳动），Volcengine V4 HMAC-SHA256 签名链零依赖实现，
+    x-content-sha256/x-date 参与签名，每月 200 万字符免费（以官方为准）；
+  - `caiyun`：彩云小译，X-Authorization token，trans_type（auto2zh/en2zh…），免费版每月 100 万字符。
+- **运行时冒烟**：`server/scripts/translate-runtime-smoke.mjs`（stub fetch，17 项）——
+  真实执行三家适配器，验证请求构造、签名链（Authorization/Credential/_signedHeaders/摘要）与语言映射路径；
+  静态自测扩至 86 项；真实网络抽查 google_free 121ms 通。
+- **客户端常量补齐**：`nodebyte_constants.h` 新增 `kDefaultSearchEngineName = "Bing"` 与
+  `kDefaultSearchURL`（编译默认必应；此前仅指令注册表与注释引用，常量缺失）；patch 0100 重新生成干跑通过。
+- **校对记录的诚实修正**（feature-checklist v1.4.2 版）：客户端 WS 信令客户端（hello/device_status/
+  command/policy_update 完整实现）、一键登录绑定（提示词 5.1.6）为骨架/未完成状态，从 ✅ 修正为 ⏳ 并列入二期。
+- 文档同步：docs/translate.md、docs/api-contract.md、README.md 计数与矩阵更新；
+  管理端下拉由 API 元信息自动扩展，客户端 WebUI（设置页/翻译面板）同步 18 种。
+
+
 ## [1.4.2] - 2026-09-26
 
 ### Added（可塑性动态服务器绑定 + TTS/更新/扩展代理三项后端代理改造 + CNB 自动建仓）

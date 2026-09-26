@@ -1,7 +1,7 @@
 # 翻译功能（v1.4.0 / v1.4.1 扩展）
 
 > 用户需求：「再加一个翻译功能看看有没有什么开源免费的翻译 API」+「后台可配置多种接口和所有常用的翻译 API」。
-> v1.4.1 起：**15 种常用翻译 API 全矩阵**，后台可视化配置（增删改排序 + 密钥 + 一键测试）。
+> v1.4.1 起：**18 种常用翻译 API 全矩阵**，后台可视化配置（增删改排序 + 密钥 + 一键测试）。
 
 ## 1. 架构（用户确认）
 
@@ -14,7 +14,7 @@ NodeByte 服务端（唯一出口）
         │ ③ 按「后台翻译配置」的 providers 顺序（weight 升序、仅 enabled）
         │    逐个尝试，首个成功即返回；失败自动降级下一个
         ▼
-翻译上游 ×15（后台配置的接口；地址与密钥仅存服务端，客户端拿不到）
+翻译上游 ×18（后台配置的接口；地址与密钥仅存服务端，客户端拿不到）
         │ ④ 写缓存（TTL 默认 168h）→ 返回
 ```
 
@@ -23,7 +23,7 @@ NodeByte 服务端（唯一出口）
 - 后台可配**多条接口**并存，排序即优先级，一条挂了自动切下一条；
 - 服务端缓存减少上游配额消耗（TTL 可配，默认 7 天）。
 
-## 2. 翻译 API 全矩阵（15 种）
+## 2. 翻译 API 全矩阵（18 种）
 
 ### 无需 Key（默认梯队，实测可用性排序）
 
@@ -49,6 +49,9 @@ NodeByte 服务端（唯一出口）
 | `niutrans` | 小牛翻译 | 100 万字/月 | apiKey | REST 直传 |
 | `yandex` | Yandex Translate | 注册赠 100 万字 | apiKey | Api-Key 头 |
 | `openai_compat` | OpenAI 兼容 LLM（ChatGPT/DeepSeek/Ollama/vLLM） | DeepSeek 约 1 元/百万 token；本地 Ollama 免费 | apiKey + model | Bearer 头 |
+| `papago` | Naver | Client-ID + Secret | 每日 1 万字符免费 | 韩/英/日/中最优 |
+| `volcengine` | 火山引擎 | AccessKey + SecretKey（HMAC4-SHA256 V4 签名） | 每月 200 万字符免费（以官方为准） | 字节跳动质量佳 |
+| `caiyun` | 彩云小译 | Token（X-Authorization） | 免费版每月 100 万字符 | 中英日，支持整段译文 |
 
 > 各家语言代码不同（zh-CN / zh / ZH / zh-CHS / zh-Hans），已按 provider 内置映射表（`LANG_MAPS`）自动转换。
 
@@ -63,7 +66,7 @@ NodeByte 服务端（唯一出口）
 
 - **总开关**：一键开启/关闭全站翻译（与策略 `NodeByteTranslateEnabled` 独立，双层管控）；
 - **默认目标语言 / 缓存 TTL / 翻译审计**开关；
-- **接口列表**：每条 = 类型下拉（15 种）+ 端点覆盖 + 凭据字段（按类型动态渲染：API Key / APPID+密钥 / Key+区域 / Key+模型）+ 权重 + 启用开关；
+- **接口列表**：每条 = 类型下拉（18 种）+ 端点覆盖 + 凭据字段（按类型动态渲染：API Key / APPID+密钥 / Key+区域 / Key+模型）+ 权重 + 启用开关；
 - **排序**：↑↓ 调整权重顺序（保存时生效）；
 - **一键测试**：调用 `POST /api/admin/translate-test`，把 "Hello, world! This is a test." 翻成 zh-CN，
   返回 ✓/✗、延迟 ms、译文样例 —— 未保存的配置也能测；

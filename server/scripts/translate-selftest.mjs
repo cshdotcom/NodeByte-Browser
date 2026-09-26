@@ -1,12 +1,12 @@
 // translate-selftest.mjs — 翻译引擎零依赖自测（CNB lite-validate / GitHub CI 调用）
 //
 // 验证点（全部不发网络请求，避免烧公共实例配额）：
-//   1) 15 种 provider 类型齐全（PROVIDER_META / ALL_PROVIDER_TYPES）
+//   1) 18 种 provider 类型齐全（PROVIDER_META / ALL_PROVIDER_TYPES）
 //   2) DEFAULT_PROVIDERS 默认梯队配置正确
-//   3) 语言代码映射存在（baidu/youdao/deepl/microsoft/niutrans/yandex/aliyun）
+//   3) 语言代码映射存在（baidu/youdao/deepl/microsoft/niutrans/yandex/aliyun/papago/volcengine/caiyun）
 //   4) /api/translate 路由与 /api/admin/translate-config、/api/admin/translate-test 路由完整
-//   5) 各适配器函数齐全（ADAPTERS 注册表 15 项）
-//   6) 签名实现存在（baidu MD5 / youdao SHA-256 / tencent TC3 / aliyun HMAC-SHA1）
+//   5) 各适配器函数齐全（ADAPTERS 注册表 18 项）
+//   6) 签名实现存在（baidu MD5 / youdao SHA-256 / tencent TC3 / aliyun HMAC-SHA1 / volcengine HMAC4）
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,6 +22,7 @@ const ALL_TYPES = [
   'google_free', 'edge_free',
   'deepl', 'microsoft', 'baidu', 'youdao',
   'tencent', 'aliyun', 'niutrans', 'yandex', 'openai_compat',
+  'papago', 'volcengine', 'caiyun',
 ];
 
 let ok = 0;
@@ -31,15 +32,15 @@ function check(name, cond) {
   else { console.log(`  FAIL ${name}`); fail++; }
 }
 
-// 1. 15 种类型
+// 1. 18 种类型
 for (const t of ALL_TYPES) {
   check(`provider 类型 ${t} 已注册`, new RegExp(`'${t}'`).test(src));
 }
 
 // 2. 元信息与适配器
-check('PROVIDER_META 已导出（15 项）', (src.match(/PROVIDER_META\s*[:=]/g) || []).length >= 1);
+check('PROVIDER_META 已导出（18 项）', (src.match(/PROVIDER_META\s*[:=]/g) || []).length >= 1);
 check('ALL_PROVIDER_TYPES 已导出', /ALL_PROVIDER_TYPES/.test(src));
-check('ADAPTERS 注册表 15 项', /const\s+ADAPTERS\s*[:=]/.test(src));
+check('ADAPTERS 注册表 18 项', /const\s+ADAPTERS\s*[:=]/.test(src));
 for (const t of ALL_TYPES) {
   check(`适配器 ${t} 已挂到 ADAPTERS`, new RegExp(`${t}: ad[A-Z]`).test(src));
 }
@@ -47,7 +48,8 @@ for (const t of ALL_TYPES) {
 // 3. 适配器实现函数
 const adapters = ['adLibreTranslate', 'adLingva', 'adMyMemory', 'adDeepLX', 'adGoogleFree',
   'adEdgeFree', 'adDeepL', 'adMicrosoft', 'adBaidu', 'adYoudao',
-  'adTencent', 'adAliyun', 'adNiutrans', 'adYandex', 'adOpenAICompat'];
+  'adTencent', 'adAliyun', 'adNiutrans', 'adYandex', 'adOpenAICompat',
+  'adPapago', 'adVolcengine', 'adCaiyun'];
 for (const a of adapters) {
   check(`实现函数 ${a} 存在`, new RegExp(`(async )?function ${a}\\(`).test(src));
 }
@@ -58,12 +60,19 @@ check('百度语言映射（zh/cht/jp/kor）', /'zh-CN':\s*'zh'/.test(src) && /'
 check('有道语言映射（zh-CHS）', /zh-CHS/.test(src));
 check('DeepL 大写映射（ZH/EN-US）', /'EN-US'/.test(src));
 check('微软映射（zh-Hans）', /zh-Hans/.test(src));
+check('Papago 恒等映射', /papago: \(c\) => c/.test(src));
+check('火山引擎映射（zh）', /volcengine: \(c\) => \(c === 'zh-CN' \? 'zh' : c\)/.test(src));
+check('彩云小译 trans_type src2tgt', /trans_type: `\$\{src\}2/.test(src));
 
 // 5. 签名算法
 check('百度 MD5 签名', /createHash\('md5'\)/.test(src));
 check('有道 SHA-256 签名', /createHash\('sha256'\)/.test(src));
 check('腾讯云 TC3-HMAC-SHA256 签名链', /TC3-HMAC-SHA256/.test(src) && /createHmac\('sha256', `TC3/.test(src));
 check('阿里云 HMAC-SHA1 RPC 签名', /createHmac\('sha1'/.test(src));
+check('Papago 双头鉴权', /X-Naver-Client-ID/.test(src) && /X-Naver-Client-Secret/.test(src));
+check('火山引擎 HMAC4-SHA256 签名链', /HMAC4-SHA256/.test(src) && /\.update\(region\)/.test(src) && /\.update\('request'\)/.test(src));
+check('火山引擎 x-content-sha256 参与签名', /x-content-sha256/.test(src));
+check('彩云小译 token 鉴权', /X-Authorization.*token/.test(src));
 
 // 6. 公共入口与测试
 check('translate() 主入口', /export\s+async\s+function\s+translate\s*\(/.test(src));

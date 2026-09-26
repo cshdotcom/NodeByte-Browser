@@ -218,7 +218,7 @@ progress { width:100%; height:6px; }
 <h2><span class="badge">翻译</span> 开源免费翻译 API（多供应商自动降级）</h2>
 <div class="card">
   <div class="f">
-    <label>翻译服务 / Translate provider（服务端聚合，后台可配 15 种接口）</label>
+    <label>翻译服务 / Translate provider（服务端聚合，后台可配 18 种接口）</label>
     <div class="row">
       <select id="trProvider" style="width:260px">
         <option value="auto">自动（按后台权重依次尝试）</option>
@@ -237,6 +237,9 @@ progress { width:100%; height:6px; }
         <option value="niutrans">小牛翻译</option>
         <option value="yandex">Yandex</option>
         <option value="openai_compat">OpenAI 兼容 LLM</option>
+        <option value="papago">Papago（Naver）</option>
+        <option value="volcengine">火山引擎翻译</option>
+        <option value="caiyun">彩云小译</option>
       </select>
       <button class="btn" id="btnTrOpen">打开翻译面板</button>
       <button class="btn" id="btnTrPage">翻译当前页</button>

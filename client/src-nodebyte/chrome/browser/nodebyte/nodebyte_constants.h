@@ -29,6 +29,11 @@ inline constexpr std::string_view kHostTranslate = "translate";
 // 默认同步服务地址（提示词 4.3；设置页展示，策略 CustomLockSyncServer=true 时置灰）
 inline constexpr std::string_view kDefaultSyncServer = "bsync.nodebyte.cn";
 
+// 编译默认搜索引擎（客户端提示词 4.5/12：必应；策略/指令可覆盖并锁定，
+// 撤销后由 DirectiveApplier/TemplateURLService 恢复到此默认）。
+inline constexpr std::string_view kDefaultSearchEngineName = "Bing";
+inline constexpr std::string_view kDefaultSearchURL = "https://cn.bing.com/search?q={searchTerms}";
+
 // 关于页标注（提示词 4.4）
 inline constexpr std::string_view kChromiumAttribution =
     "Based on Chromium open-source project";
