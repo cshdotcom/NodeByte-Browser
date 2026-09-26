@@ -190,7 +190,7 @@ new file mode 100644
 +
 +grit("nodebyte_resources") {
 +  source = "nodebyte_resources.grd"
-+  defines = build_flag_defines
++  # 不传 defines：grd 无条件编译分支（build_flag_defines 并非全局变量，gn gen 会报 Undefined identifier）
 +  use_qualified_include = false
 +  output_dir = "$root_gen_dir/chrome/browser/resources/nodebyte"
 +}
