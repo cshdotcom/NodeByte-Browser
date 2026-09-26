@@ -41,11 +41,15 @@ fi
 export PATH="${WORK}/depot_tools:${PATH}"
 if [ ! -f depot_tools/python3_bin_reldir.txt ]; then
   echo "==> bootstrap depot_tools ..."
-  (cd depot_tools && ./update_depot_tools)
-  [ -f depot_tools/python3_bin_reldir.txt ] || {
-    echo "warn: python3_bin_reldir.txt 缺失，再试一次 bootstrap" >&2
-    (cd depot_tools && ./update_depot_tools) || true
-  }
+  bt_ok=0
+  for bt in 1 2 3 4 5; do
+    if (cd depot_tools && ./update_depot_tools) && [ -f depot_tools/python3_bin_reldir.txt ]; then
+      bt_ok=1; break
+    fi
+    echo "warn: depot_tools bootstrap 第 ${bt} 次失败（googlesource 网络抖动），20s 后重试"
+    sleep 20
+  done
+  [ "${bt_ok}" = "1" ] || { echo "error: depot_tools bootstrap 5 次均失败" >&2; exit 1; }
 fi
 
 # 2) 官方正式版 stable 源码（钉住版本，hook 0230/0240 基于 154 基线）：
