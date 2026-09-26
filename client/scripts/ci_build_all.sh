@@ -33,7 +33,7 @@ fi
 
 # 2) 官方正式版源码（gclient fetch --no-history；googlesource 大仓库从国内网络
 #    易静默挂死 —— 心跳保活 + 断点续传重试，v1.4.5 编译监督修复）
-mkdir -p "${SRC}" && cd "${SRC}"
+cd "${WORK}"   # fetch 必须在 WORK 根执行：.gclient@WORK，源码树 WORK/src=SRC（旧写法在 SRC 内 fetch 会产生双层 src/src）
 heartbeat_start() {
   while kill -0 "$1" 2>/dev/null; do
     sleep 45
@@ -42,7 +42,7 @@ heartbeat_start() {
 }
 sync_attempt() {
   # 已有 .gclient → 增量续传；否则首次 fetch
-  if [ ! -f .gclient ]; then
+  if [ ! -f "${WORK}/.gclient" ]; then
     fetch --no-history chromium
   else
     gclient sync -D --no-history
