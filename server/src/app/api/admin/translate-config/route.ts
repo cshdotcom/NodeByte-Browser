@@ -5,34 +5,26 @@ import { adminAudit, clientIp } from '@/lib/audit';
 import {
   DEFAULT_SETTINGS,
   DEFAULT_PROVIDERS,
+  PROVIDER_META,
+  ALL_PROVIDER_TYPES,
   type TranslateSettings,
   type ProviderConfig,
-  type TranslateProvider,
+  type ProviderType,
 } from '@/lib/translate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * 管理后台 - 翻译配置（用户需求：开源免费翻译 API）
+ * 管理后台 - 翻译配置（用户需求：后台可配置多种接口和所有常用的翻译 API）
  *
- * GET  /api/admin/translate-config  — 读取当前配置（含 apiKey，仅管理员可见）
- * PUT  /api/admin/translate-config  — 整体覆盖配置
- *   body: TranslateSettings
+ * GET  /api/admin/translate-config  — 读取当前配置 + 全部 provider 元信息（UI 渲染用）
+ * PUT  /api/admin/translate-config  — 整体覆盖配置（providers[] 支持全部 15 种类型）
  *
- * 配置存于 system_setting.translate_config（jsonb）：
- *   {
- *     enabled: bool,
- *     providers: ProviderConfig[],  // 为空时用 DEFAULT_PROVIDERS
- *     cacheTtlHours: number,
- *     auditLog: bool,
- *     defaultTarget: string
- *   }
+ * providers[] 每项字段（按类型部分字段可省略）：
+ *   { provider, endpoint?, apiKey?, appId?, region?, model?, weight, enabled }
+ * 密钥仅存服务端 system_setting（jsonb），客户端/浏览器永远拿不到。
  */
-
-const VALID_PROVIDERS: ReadonlySet<TranslateProvider> = new Set([
-  'libretranslate', 'lingva', 'mymemory', 'deeplx',
-]);
 
 function validateSettings(v: unknown): TranslateSettings | null {
   if (!v || typeof v !== 'object') return null;
@@ -42,20 +34,29 @@ function validateSettings(v: unknown): TranslateSettings | null {
   if (typeof o.auditLog !== 'boolean') return null;
   if (typeof o.defaultTarget !== 'string' || !o.defaultTarget) return null;
 
-  let providers: ProviderConfig[] = [];
+  const providers: ProviderConfig[] = [];
   if (Array.isArray(o.providers)) {
     for (const p of o.providers) {
       if (!p || typeof p !== 'object') return null;
-      const cfg = p as ProviderConfig;
-      if (!VALID_PROVIDERS.has(cfg.provider)) return null;
-      if (typeof cfg.endpoint !== 'string' || !/^https?:\/\//.test(cfg.endpoint)) return null;
-      if (typeof cfg.weight !== 'number' || cfg.weight < 0) return null;
-      if (cfg.apiKey !== undefined && typeof cfg.apiKey !== 'string') return null;
+      const c = p as Partial<ProviderConfig>;
+      if (!c.provider || !ALL_PROVIDER_TYPES.includes(c.provider)) return null;
+      if (typeof c.weight !== 'number' || c.weight < 0 || c.weight > 10000) return null;
+      if (typeof c.enabled !== 'boolean') return null;
+      if (c.endpoint !== undefined && c.endpoint !== '' && (typeof c.endpoint !== 'string' || !/^https?:\/\//.test(c.endpoint))) return null;
+      // 凭据按形状校验（保存时宽松——允许留空由测试按钮暴露问题；仅校验类型）
+      // 注意：留空的密钥由 PUT 的「密钥合并」逻辑从旧配置继承（脱敏回显后无需重输）
+      for (const k of ['apiKey', 'appId', 'appSecret', 'region', 'model'] as const) {
+        if (c[k] !== undefined && typeof c[k] !== 'string') return null;
+      }
       providers.push({
-        provider: cfg.provider,
-        endpoint: cfg.endpoint,
-        weight: cfg.weight,
-        apiKey: cfg.apiKey || undefined,
+        provider: c.provider as ProviderType,
+        endpoint: c.endpoint?.trim() || undefined,
+        apiKey: c.apiKey || c.appSecret || undefined,
+        appId: c.appId || undefined,
+        region: c.region || undefined,
+        model: c.model || undefined,
+        weight: c.weight,
+        enabled: c.enabled,
       });
     }
   }
@@ -76,7 +77,15 @@ export async function GET(req: Request) {
     `SELECT setting_value FROM system_setting WHERE setting_key = 'translate_config'`
   );
   const settings = row ? validateSettings(row.setting_value) ?? DEFAULT_SETTINGS : DEFAULT_SETTINGS;
-  return ok({ settings, defaults: DEFAULT_PROVIDERS });
+  return ok({
+    settings: {
+      ...settings,
+      providers: settings.providers.map((p) => ({ ...p, apiKey: p.apiKey ? '••••••••(已配置)' : undefined })),
+    },
+    defaults: DEFAULT_PROVIDERS,
+    meta: PROVIDER_META,
+    types: ALL_PROVIDER_TYPES,
+  });
 }
 
 export async function PUT(req: Request) {
@@ -85,7 +94,24 @@ export async function PUT(req: Request) {
 
   const body = await readJson<TranslateSettings>(req);
   const validated = validateSettings(body);
-  if (!validated) return err(CODE.BAD_REQUEST, '配置格式不合法');
+  if (!validated) return err(CODE.BAD_REQUEST, '配置格式不合法（provider 类型 / weight / 凭据字段）');
+
+  // 密钥合并：前端回显时密钥脱敏（••…），留空提交 = 保留原密钥。
+  // 匹配规则：同 provider 类型 + 同 appId（同一实例），继承旧 apiKey/region/model。
+  const oldRow = await q1<{ setting_value: unknown }>(
+    `SELECT setting_value FROM system_setting WHERE setting_key = 'translate_config'`
+  );
+  const oldCfg = oldRow ? validateSettings(oldRow.setting_value) : null;
+  if (oldCfg) {
+    for (const p of validated.providers) {
+      if (!p.apiKey) {
+        const old = oldCfg.providers.find(
+          (x) => x.provider === p.provider && (x.appId ?? '') === (p.appId ?? '')
+        );
+        if (old) p.apiKey = old.apiKey;
+      }
+    }
+  }
 
   await q1(
     `INSERT INTO system_setting (setting_key, setting_value) VALUES ('translate_config', $1::jsonb)
@@ -100,10 +126,11 @@ export async function PUT(req: Request) {
       key: 'translate_config',
       enabled: validated.enabled,
       providersCount: validated.providers.length,
+      providerTypes: validated.providers.map((p) => p.provider),
       defaultTarget: validated.defaultTarget,
     },
     ip: clientIp(req),
   });
 
-  return ok(null, '翻译配置已保存');
+  return ok(null, '翻译配置已保存（已在浏览器端即时生效）');
 }

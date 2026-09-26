@@ -1,50 +1,76 @@
-# 翻译功能（v1.4.0）
+# 翻译功能（v1.4.0 / v1.4.1 扩展）
 
-> 用户需求：「再加一个翻译功能看看有没有什么开源免费的翻译 API」。
-> 全部使用**开源 / 可自托管 / 无需付费 API Key**的翻译服务，避免依赖 Google/DeepL 商业 API。
+> 用户需求：「再加一个翻译功能看看有没有什么开源免费的翻译 API」+「后台可配置多种接口和所有常用的翻译 API」。
+> v1.4.1 起：**15 种常用翻译 API 全矩阵**，后台可视化配置（增删改排序 + 密钥 + 一键测试）。
 
-## 1. 选型：开源翻译 API 矩阵
-
-| 供应商 | 协议 | 开源协议 | 公共实例 | 自托管 | API Key | 备注 |
-|---|---|---|---|---|---|---|
-| **LibreTranslate** | REST | AGPL-3.0 | ✅ translate.argosopentech.com / libretranslate.de | ✅ Docker 一键起 | 可选 | 主用，纯开源，社区维护 |
-| **Lingva Translate** | REST | GPL-3.0 | ✅ lingva.ml / lingva.lunar.icu | ✅ Docker | 不需要 | Google Translate 代理，无需 Key |
-| **MyMemory** | REST | 专有（免费配额） | ✅ api.mymemory.translated.net | ❌ | 可选 | 5000 词/天免费，兜底用 |
-| **DeepLX** | REST | MIT | ❌（多数公共实例已限速） | ✅ Docker | 不需要 | DeepL 免费版代理 |
-| **Argos Translate** | 离线 | MIT | — | ✅ Python 包，可嵌入 Docker | — | 完全离线，后续可作离线兜底 |
-
-### 为什么不直接用 Google Translate API / DeepL API？
-- 商业 API 需要付费 Key，与「开源免费」目标不符；
-- 公共实例有时会限速，但服务端聚合 + 缓存 + 自动降级足以覆盖大部分场景；
-- 自托管 LibreTranslate / DeepLX 完全可控、无配额限制、零成本。
-
-## 2. 架构
+## 1. 架构（用户确认）
 
 ```
-浏览器客户端（TranslateController）
-        │
-        │ POST /api/translate { text, source?, target, format? }
+浏览器/客户端（nodebyte://translate / 整页翻译 / 右键翻译）
+        │ ① 登录态 JWT + POST /api/translate
         ▼
-服务端（Next.js API）
-   ├─ 命中缓存？ → 直接返回（cached=true）
-   ├─ 否则按 providers 权重依次尝试：
-   │    1. LibreTranslate  → 200 OK 即返回
-   │    2. Lingva          → 200 OK 即返回
-   │    3. MyMemory        → 200 OK 即返回
-   │    4. DeepLX          → 200 OK 即返回
-   └─ 全部失败 → AggregateError（含每个 provider 的错误明细）
-        │
+NodeByte 服务端（唯一出口）
+        │ ② 策略检查（NodeByteTranslateEnabled）→ 缓存查询（sha256+lang）
+        │ ③ 按「后台翻译配置」的 providers 顺序（weight 升序、仅 enabled）
+        │    逐个尝试，首个成功即返回；失败自动降级下一个
         ▼
-   写入 in-process 缓存（key=sha256(text)+lang 对，TTL=cacheTtlHours，默认 168h）
+翻译上游 ×15（后台配置的接口；地址与密钥仅存服务端，客户端拿不到）
+        │ ④ 写缓存（TTL 默认 168h）→ 返回
 ```
 
-**为什么客户端不直接调公共实例？**
-1. 不暴露服务端密钥/自托管端点给浏览器；
-2. 服务端可缓存（命中即返回，不烧公共实例配额）+ 限速 + 审计；
-3. 策略 `NodeByteTranslateEnabled` 由服务端统一管控，浏览器侧只需隐藏入口；
-4. 浏览器同源策略下跨域请求公共实例可能被 CORS 拦截。
+- 客户端**永远不直连**翻译上游 —— 只知道 `/api/translate`；
+- 上游地址/API Key/APPID 仅存服务端 `system_setting`（数据库），不下发浏览器；
+- 后台可配**多条接口**并存，排序即优先级，一条挂了自动切下一条；
+- 服务端缓存减少上游配额消耗（TTL 可配，默认 7 天）。
 
-## 3. 接口
+## 2. 翻译 API 全矩阵（15 种）
+
+### 无需 Key（默认梯队，实测可用性排序）
+
+| 类型 | 名称 | 协议/来源 | 免费额度 | 默认 | 实测（2026-09） |
+|---|---|---|---|---|---|
+| `google_free` | Google 翻译免费端点 | 非官方 `translate.googleapis.com`（client=gtx） | 免费匿名 | ✅ 启用 | ✅ **实测可用**（1s） |
+| `edge_free` | Edge 免费翻译 | `edge.microsoft.com/translate/auth` 匿名 JWT + `api-edge.cognitive.microsofttranslator.com` | 免费匿名 | ✅ 启用 | 端点文档化，随部署网络而定 |
+| `mymemory` | MyMemory | `api.mymemory.translated.net` | 5000 词/天 | ✅ 启用 | ✅ **实测可用**（0.8s） |
+| `libretranslate` | LibreTranslate | AGPL-3.0 | 公共实例现已需 Key；**Docker 自托管无限** | ⬜ 默认停用 | 公共实例收紧（argosopentech 已关停、libretranslate.de 跳转需 Key） |
+| `lingva` | Lingva Translate | GPL-3.0，Google 代理 | 免费公共 | ⬜ 默认停用 | 公共实例被 CF 盾拦截（403），自托管可用 |
+| `deeplx` | DeepLX | MIT，DeepL 代理 | 自托管无限 | ⬜ 默认停用 | 需自行 Docker 部署 |
+
+### 需 Key（官方免费额度，后台填入即可用）
+
+| 类型 | 名称 | 免费额度 | 凭据形状 | 签名实现（零依赖） |
+|---|---|---|---|---|
+| `deepl` | DeepL API Free | 50 万字/月 | apiKey | Bearer 头 |
+| `microsoft` | Azure Translator F0 | 200 万字/月 | apiKey + region | 订阅密钥头 |
+| `baidu` | 百度翻译开放平台 | 标准版 5 万字/月（可认证提额） | appId + key | **MD5(appid+q+salt+key)** |
+| `youdao` | 有道智云 | 新用户体验金 | appKey + appSecret | **SHA-256(appKey+input+salt+curtime+secret)** |
+| `tencent` | 腾讯云 TMT | 500 万字/月 | secretId + secretKey | **TC3-HMAC-SHA256 签名链** |
+| `aliyun` | 阿里云机器翻译 | 100 万字/月（通用版） | AccessKeyId + Secret | **HMAC-SHA1 RPC 签名** |
+| `niutrans` | 小牛翻译 | 100 万字/月 | apiKey | REST 直传 |
+| `yandex` | Yandex Translate | 注册赠 100 万字 | apiKey | Api-Key 头 |
+| `openai_compat` | OpenAI 兼容 LLM（ChatGPT/DeepSeek/Ollama/vLLM） | DeepSeek 约 1 元/百万 token；本地 Ollama 免费 | apiKey + model | Bearer 头 |
+
+> 各家语言代码不同（zh-CN / zh / ZH / zh-CHS / zh-Hans），已按 provider 内置映射表（`LANG_MAPS`）自动转换。
+
+### 为什么还有 Google 非官方端点？
+- `translate.googleapis.com/translate_a/single?client=gtx` 是 Google 翻译网页版自己的免费接口，
+  无需 Key、质量最好、实测可用；作为默认首选能保证「开箱即用零配置」；
+- 用户如担心稳定性，可在后台把它降权或停用，改用自有 Key 的官方接口。
+
+## 2b. 后台管理端「翻译配置」面板（v1.4.1 新增）
+
+入口：管理后台 → **翻译配置** 标签页。能力：
+
+- **总开关**：一键开启/关闭全站翻译（与策略 `NodeByteTranslateEnabled` 独立，双层管控）；
+- **默认目标语言 / 缓存 TTL / 翻译审计**开关；
+- **接口列表**：每条 = 类型下拉（15 种）+ 端点覆盖 + 凭据字段（按类型动态渲染：API Key / APPID+密钥 / Key+区域 / Key+模型）+ 权重 + 启用开关；
+- **排序**：↑↓ 调整权重顺序（保存时生效）；
+- **一键测试**：调用 `POST /api/admin/translate-test`，把 "Hello, world! This is a test." 翻成 zh-CN，
+  返回 ✓/✗、延迟 ms、译文样例 —— 未保存的配置也能测；
+- **密钥保护**：保存后回显脱敏（`••••••••`），留空保存 = 保留原密钥（服务端 merge 逻辑）；
+- 全部修改写管理员审计（`modify_system_setting`）。
+
+## 3. 请求/响应
 
 ### 3.1 GET `/api/translate`
 返回支持语言列表 + 当前可用 provider 列表（脱敏：不含 apiKey）+ 默认目标语言。
@@ -83,8 +109,8 @@
   "data": {
     "translatedText": "你好，世界！",
     "detectedSource": "en",
-    "provider": "libretranslate",
-    "endpoint": "https://translate.argosopentech.com",
+    "provider": "google_free",
+    "endpoint": "https://translate.googleapis.com",
     "cached": false
   }
 }
@@ -95,12 +121,13 @@
 {
   "enabled": true,
   "providers": [
-    {
-      "provider": "libretranslate",
-      "endpoint": "https://lt.my-corp.internal",
-      "apiKey": "optional-when-your-instance-requires-it",
-      "weight": 10
-    }
+    { "provider": "google_free", "weight": 10, "enabled": true },
+    { "provider": "edge_free", "weight": 20, "enabled": true },
+    { "provider": "mymemory", "weight": 30, "enabled": true },
+    { "provider": "deepl", "apiKey": "xxxxxxxx-xxxx-...:fx", "weight": 40, "enabled": true },
+    { "provider": "baidu", "appId": "202601xxxxxx", "apiKey": "百度密钥", "weight": 50, "enabled": true },
+    { "provider": "tencent", "appId": "AKIDxxxxxx", "apiKey": "secretKey", "weight": 60, "enabled": true },
+    { "provider": "openai_compat", "endpoint": "https://api.deepseek.com/v1", "apiKey": "sk-...", "model": "deepseek-chat", "weight": 70, "enabled": false }
   ],
   "cacheTtlHours": 168,
   "auditLog": false,
@@ -108,10 +135,14 @@
 }
 ```
 
-- `providers` 留空数组 → 用 DEFAULT_PROVIDERS（公共实例）；
+- `providers` 留空数组 → 用 DEFAULT_PROVIDERS（google_free/edge_free/mymemory 启用）；
+- 每条支持字段：`provider / endpoint / apiKey / appId / region / model / weight / enabled`；
+- 保存后密钥回显脱敏，留空提交 = 保留原密钥（服务端 merge）；
+- **连通性测试**：`POST /api/admin/translate-test`（body 单条 provider 配置）→ `{ ok, detail, sample, latencyMs }`；
 - 自托管 LibreTranslate：`docker run -p 5000:5000 libretranslate/libretranslate`
 - 自托管 DeepLX：`docker run -p 1188:1188 ghcr.io/owen0oii/deeplx`
 - 自托管 Lingva：`docker run -p 8080:3000 thedaviddelta/lingva-translate`
+- 本地 LLM（免 Key）：`docker run -p 11434:11434 ollama/ollama`，endpoint 填 `http://127.0.0.1:11434/v1`，model 填 `llama3`
 
 ## 4. 客户端能力（C++ TranslateController）
 

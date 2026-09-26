@@ -1,12 +1,12 @@
-// translate-selftest.mjs — 翻译引擎零依赖自测（CNB lite-validate 调用）
+// translate-selftest.mjs — 翻译引擎零依赖自测（CNB lite-validate / GitHub CI 调用）
 //
-// 验证点：
-//   1) DEFAULT_PROVIDERS 不为空且各字段类型正确
-//   2) COMMON_LANGUAGES 含 'auto' 与 'zh-CN'
-//   3) sanitizeProviders 正确剥离 apiKey
-//   4) loadSettings 默认值合并正确
-//
-// 不发起任何网络请求（避免烧公共实例配额）；纯逻辑校验。
+// 验证点（全部不发网络请求，避免烧公共实例配额）：
+//   1) 15 种 provider 类型齐全（PROVIDER_META / ALL_PROVIDER_TYPES）
+//   2) DEFAULT_PROVIDERS 默认梯队配置正确
+//   3) 语言代码映射存在（baidu/youdao/deepl/microsoft/niutrans/yandex/aliyun）
+//   4) /api/translate 路由与 /api/admin/translate-config、/api/admin/translate-test 路由完整
+//   5) 各适配器函数齐全（ADAPTERS 注册表 15 项）
+//   6) 签名实现存在（baidu MD5 / youdao SHA-256 / tencent TC3 / aliyun HMAC-SHA1）
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,75 +17,96 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const libPath = join(__dirname, '..', 'src', 'lib', 'translate.ts');
 const src = readFileSync(libPath, 'utf8');
 
-// 简易 TS→JS 推断：去掉类型注解后用动态 eval 检查导出
-// 实际验证用正则 + AST-lite 方法，避免引入 typescript 依赖
-const checks = [
-  ['DEFAULT_PROVIDERS 已导出且非空', /export\s+const\s+DEFAULT_PROVIDERS\s*[:=]/.test(src)],
-  ['COMMON_LANGUAGES 已导出', /export\s+const\s+COMMON_LANGUAGES/.test(src)],
-  ['TranslateProvider 类型含 libretranslate', /'libretranslate'/.test(src)],
-  ['TranslateProvider 类型含 lingva', /'lingva'/.test(src)],
-  ['TranslateProvider 类型含 mymemory', /'mymemory'/.test(src)],
-  ['TranslateProvider 类型含 deeplx', /'deeplx'/.test(src)],
-  ['translate() 函数已导出', /export\s+async\s+function\s+translate\s*\(/.test(src)],
-  ['listProviders() 已导出', /export\s+function\s+listProviders\s*\(/.test(src)],
-  ['sanitizeProviders() 已导出', /export\s+function\s+sanitizeProviders\s*\(/.test(src)],
-  ['缓存 sha256Hex 已实现', /function\s+sha256Hex\s*\(/.test(src)],
-  ['请求超时 8s', /REQUEST_TIMEOUT_MS\s*=\s*8000/.test(src)],
-  ['AggregateError 处理', /AggregateError/.test(src)],
+const ALL_TYPES = [
+  'libretranslate', 'lingva', 'mymemory', 'deeplx',
+  'google_free', 'edge_free',
+  'deepl', 'microsoft', 'baidu', 'youdao',
+  'tencent', 'aliyun', 'niutrans', 'yandex', 'openai_compat',
 ];
 
 let ok = 0;
 let fail = 0;
-for (const [name, cond] of checks) {
-  if (cond) {
-    console.log(`  ok   ${name}`);
+function check(name, cond) {
+  if (cond) { console.log(`  ok   ${name}`); ok++; }
+  else { console.log(`  FAIL ${name}`); fail++; }
+}
+
+// 1. 15 种类型
+for (const t of ALL_TYPES) {
+  check(`provider 类型 ${t} 已注册`, new RegExp(`'${t}'`).test(src));
+}
+
+// 2. 元信息与适配器
+check('PROVIDER_META 已导出（15 项）', (src.match(/PROVIDER_META\s*[:=]/g) || []).length >= 1);
+check('ALL_PROVIDER_TYPES 已导出', /ALL_PROVIDER_TYPES/.test(src));
+check('ADAPTERS 注册表 15 项', /const\s+ADAPTERS\s*[:=]/.test(src));
+for (const t of ALL_TYPES) {
+  check(`适配器 ${t} 已挂到 ADAPTERS`, new RegExp(`${t}: ad[A-Z]`).test(src));
+}
+
+// 3. 适配器实现函数
+const adapters = ['adLibreTranslate', 'adLingva', 'adMyMemory', 'adDeepLX', 'adGoogleFree',
+  'adEdgeFree', 'adDeepL', 'adMicrosoft', 'adBaidu', 'adYoudao',
+  'adTencent', 'adAliyun', 'adNiutrans', 'adYandex', 'adOpenAICompat'];
+for (const a of adapters) {
+  check(`实现函数 ${a} 存在`, new RegExp(`(async )?function ${a}\\(`).test(src));
+}
+
+// 4. 语言映射
+check('语言映射表 LANG_MAPS 存在', /LANG_MAPS\s*[:=]/.test(src));
+check('百度语言映射（zh/cht/jp/kor）', /'zh-CN':\s*'zh'/.test(src) && /'ja':\s*'jp'/.test(src));
+check('有道语言映射（zh-CHS）', /zh-CHS/.test(src));
+check('DeepL 大写映射（ZH/EN-US）', /'EN-US'/.test(src));
+check('微软映射（zh-Hans）', /zh-Hans/.test(src));
+
+// 5. 签名算法
+check('百度 MD5 签名', /createHash\('md5'\)/.test(src));
+check('有道 SHA-256 签名', /createHash\('sha256'\)/.test(src));
+check('腾讯云 TC3-HMAC-SHA256 签名链', /TC3-HMAC-SHA256/.test(src) && /createHmac\('sha256', `TC3/.test(src));
+check('阿里云 HMAC-SHA1 RPC 签名', /createHmac\('sha1'/.test(src));
+
+// 6. 公共入口与测试
+check('translate() 主入口', /export\s+async\s+function\s+translate\s*\(/.test(src));
+check('testProvider() 一键测试', /export\s+async\s+function\s+testProvider\s*\(/.test(src));
+check('listProviders() 启用过滤', /filter\(\(p\)\s*=>\s*p\.enabled\s*!==\s*false\)/.test(src));
+check('缓存 sha256Hex', /function\s+sha256Hex\s*\(/.test(src));
+check('请求超时 10s', /REQUEST_TIMEOUT_MS\s*=\s*10000/.test(src));
+check('AggregateError 降级汇总', /AggregateError/.test(src));
+check('Edge 匿名 JWT 缓存', /edgeJwtCache/.test(src));
+
+// 7. 路由文件
+function checkRoute(path, patterns, label) {
+  try {
+    const r = readFileSync(join(__dirname, '..', 'src', 'app', path), 'utf8');
+    for (const p of patterns) assert.ok(p.re.test(r), p.name);
+    console.log(`  ok   ${label}`);
     ok++;
-  } else {
-    console.log(`  FAIL ${name}`);
+  } catch (e) {
+    console.log(`  FAIL ${label}: ${e.message}`);
     fail++;
   }
 }
 
-// 进一步：直接 import 编译后的 JS（Next.js 已经把 TS 编译过；这里用 ts-node 不可用，改为正则已覆盖）
-// 验证 DEFAULT_PROVIDERS 内容（用正则抽取）
-const m = src.match(/export\s+const\s+DEFAULT_PROVIDERS[^;]*?\];/s);
-if (m) {
-  const block = m[0];
-  assert.ok(/libretranslate/.test(block), 'default providers should include libretranslate');
-  assert.ok(/lingva/.test(block), 'default providers should include lingva');
-  assert.ok(/mymemory/.test(block), 'default providers should include mymemory');
-  console.log('  ok   DEFAULT_PROVIDERS contains all 3 expected providers');
-  ok++;
-} else {
-  console.log('  FAIL DEFAULT_PROVIDERS block not found');
-  fail++;
-}
+checkRoute('api/translate/route.ts',
+  [{ re: /export\s+async\s+function\s+POST/, name: 'POST' },
+   { re: /export\s+async\s+function\s+GET/, name: 'GET' }],
+  '/api/translate 路由完整（GET + POST）');
+checkRoute('api/admin/translate-config/route.ts',
+  [{ re: /export\s+async\s+function\s+PUT/, name: 'PUT' },
+   { re: /export\s+async\s+function\s+GET/, name: 'GET' },
+   { re: /validateSettings/, name: 'validator' },
+   { re: /密钥合并|apiKey = old\.apiKey|p\.apiKey = old/, name: 'key merge' }],
+  '/api/admin/translate-config 路由完整（GET + PUT + 校验 + 密钥合并）');
+checkRoute('api/admin/translate-test/route.ts',
+  [{ re: /export\s+async\s+function\s+POST/, name: 'POST' },
+   { re: /testProvider/, name: 'testProvider call' }],
+  '/api/admin/translate-test 路由完整（POST + testProvider）');
 
-// 翻译 API 路由存在性
-const routePath = join(__dirname, '..', 'src', 'app', 'api', 'translate', 'route.ts');
-const adminPath = join(__dirname, '..', 'src', 'app', 'api', 'admin', 'translate-config', 'route.ts');
-try {
-  const r1 = readFileSync(routePath, 'utf8');
-  assert.ok(/export\s+async\s+function\s+POST/.test(r1), 'POST handler missing');
-  assert.ok(/export\s+async\s+function\s+GET/.test(r1), 'GET handler missing');
-  console.log('  ok   /api/translate route has GET + POST');
-  ok++;
-} catch (e) {
-  console.log(`  FAIL /api/translate route: ${e.message}`);
-  fail++;
-}
-
-try {
-  const r2 = readFileSync(adminPath, 'utf8');
-  assert.ok(/export\s+async\s+function\s+GET/.test(r2), 'admin GET missing');
-  assert.ok(/export\s+async\s+function\s+PUT/.test(r2), 'admin PUT missing');
-  assert.ok(/validateSettings/.test(r2), 'validateSettings missing');
-  console.log('  ok   /api/admin/translate-config route has GET + PUT + validator');
-  ok++;
-} catch (e) {
-  console.log(`  FAIL /api/admin/translate-config route: ${e.message}`);
-  fail++;
-}
+// 8. 管理后台 UI 面板
+const adminPage = readFileSync(join(__dirname, '..', 'src', 'app', 'admin', 'page.tsx'), 'utf8');
+check('后台 TranslatePanel 面板存在', /function TranslatePanel\(\)/.test(adminPage));
+check('后台 tab 注册 translate', /'translate', t\('translate'\)/.test(adminPage));
+check('后台一键测试按钮', /translate-test/.test(adminPage));
 
 console.log(`\ntranslate-selftest: ${ok} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

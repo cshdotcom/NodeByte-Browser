@@ -84,7 +84,7 @@ textarea[readonly] { background:rgba(47,107,255,.04); }
   </svg>
   <div>
     <h1>NodeByte 翻译 <span class="badge">开源 · 多供应商</span></h1>
-    <div class="sub">LibreTranslate · Lingva · MyMemory · DeepLX — 自动降级，无需付费 API Key</div>
+    <div class="sub">Google 免费端点 · Edge 匿名 · MyMemory · LibreTranslate · DeepL · 百度 · 有道 · 腾讯云 · 阿里云 · 小牛 · Yandex · LLM — 15 种接口，服务端自动降级</div>
   </div>
 </header>
 
@@ -123,8 +123,9 @@ textarea[readonly] { background:rgba(47,107,255,.04); }
     </div>
 
     <p class="hint">
-      所有请求经服务端聚合，按权重依次尝试 LibreTranslate / Lingva / MyMemory / DeepLX；
-      命中缓存直接返回（cached=true）。管理员可在「后台 → 翻译配置」中切换自托管实例或关闭功能。
+      所有请求经服务端聚合，按权重依次尝试已启用的翻译接口（默认：Google 免费端点 → Edge 匿名端点 → MyMemory），
+      命中缓存直接返回（cached=true）。管理员可在「后台 → 翻译配置」中添加 15 种接口
+      （含 DeepL/百度/有道/腾讯云/阿里云/小牛/Yandex/LLM 等，可填密钥、调整顺序、一键测试）或关闭功能。
       <br>策略 <code>NodeByteTranslateEnabled=false</code> 时入口隐藏；<code>NodeByteTranslateMaxChars</code> 限制单次字符数。
     </p>
   </div>
@@ -231,10 +232,21 @@ translateBtn.addEventListener('click', async () => {
     const r = j.data;
     tgtText.value = r.translatedText;
     const providerLabel = ({
+      google_free: 'Google 免费端点',
+      edge_free: 'Edge 免费翻译',
       libretranslate: 'LibreTranslate',
       lingva: 'Lingva',
       mymemory: 'MyMemory',
       deeplx: 'DeepLX',
+      deepl: 'DeepL 官方',
+      microsoft: 'Azure 翻译',
+      baidu: '百度翻译',
+      youdao: '有道智云',
+      tencent: '腾讯云 TMT',
+      aliyun: '阿里云翻译',
+      niutrans: '小牛翻译',
+      yandex: 'Yandex',
+      openai_compat: 'LLM 翻译',
     })[r.provider] || r.provider;
     meta.innerHTML = `
       <span class="ok">✓ ${providerLabel}</span>

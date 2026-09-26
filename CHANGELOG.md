@@ -7,6 +7,35 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-26
+
+### Added（翻译 API 全矩阵 15 种 + 后台可视化配置 + 一键测试）
+
+- **翻译接口扩充到 15 种常用 API**（server/src/lib/translate.ts 重构为适配器注册表）：
+  - **免 Key 默认梯队**（开箱即用）：`google_free`（Google 免费端点 client=gtx，**实测可用**）→
+    `edge_free`（Edge 匿名 JWT，与新版 Edge 同款）→ `mymemory`（5000 词/天，**实测可用**）
+  - **开源自托管**：`libretranslate`（公共实例已收紧，Docker 自托管无限）、`lingva`（公共实例被 CF 盾，自托管可用）、`deeplx`
+  - **官方免费额度**（后台填 Key 即用）：`deepl`（50 万字/月）、`microsoft`（Azure 200 万字/月）、
+    `baidu`（MD5 签名）、`youdao`（SHA-256 v3 签名）、`tencent`（**TC3-HMAC-SHA256 签名链**，500 万字/月）、
+    `aliyun`（HMAC-SHA1 RPC 签名，100 万字/月）、`niutrans`（100 万字/月）、`yandex`
+  - **LLM 翻译**：`openai_compat`（ChatGPT/DeepSeek/Ollama/vLLM，任意 OpenAI 兼容端点，本地模型免 Key）
+  - 全部**零第三方依赖**（MD5/SHA-256/TC3/SHA1 签名均 node:crypto 手写）；per-provider 语言代码映射（zh-CN/zh/ZH/zh-CHS/zh-Hans 自动转换）
+  - **默认梯队实测排序**：2026-09 实测 google_free（1s）与 mymemory（0.8s）可用；argosopentech 公共实例已关停、libretranslate.de 跳转需 Key → libretranslate/lingva 默认停用，自托管后启用
+- **后台管理端「翻译配置」面板**（/admin 新标签页）：
+  - 总开关 / 默认目标语言 / 缓存 TTL / 翻译审计
+  - 接口列表：类型下拉（15 种）+ 端点覆盖 + 凭据字段**按类型动态渲染**（API Key / APPID+密钥 / Key+区域 / Key+模型）+ 权重 + 启用
+  - ↑↓ 排序（weight 优先级）、添加/删除接口
+  - **一键测试**：`POST /api/admin/translate-test` → ✓/✗ + 延迟 ms + 译文样例（未保存配置也可测）
+  - **密钥保护**：回显脱敏 `••••••••`，留空保存 = 保留原密钥（服务端 merge 按 provider+appId 匹配继承）
+  - 修改写管理员审计；密钥仅存服务端，浏览器端只见脱敏清单
+- 客户端 WebUI 同步更新：nodebyte://translate 顶栏与设置页翻译段列出 15 种接口说明
+- translate-selftest 扩充到 **70 项**（15 类型注册/15 适配器/语言映射/4 种签名算法/路由完整性/后台面板）
+
+### 架构确认（用户原话：「浏览器里面的内容可以先走后端，再通过后台配置再连接到服务器」）
+- 客户端只访问 `POST /api/translate`（登录态 JWT）
+- 后端按「后台翻译配置」的接口顺序连接上游；上游地址与密钥永不下发浏览器
+- 一条接口失败自动降级下一条；缓存命中直接返回不烧上游配额
+
 ## [1.4.0] - 2026-09-26
 
 ### Added（开源免费翻译 API + CNB 编译机会保护）

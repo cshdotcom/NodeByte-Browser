@@ -224,6 +224,13 @@
 | 1 | 翻译功能，使用开源免费翻译 API | ✅ | server/src/lib/translate.ts（多供应商：LibreTranslate/Lingva/MyMemory/DeepLX 自动降级 + 缓存）+ /api/translate + /api/admin/translate-config + nodebyte://translate WebUI + 设置页入口 + C++ TranslateController（整页/选区翻译 + DOM 还原）+ patch 0180 + docs/translate.md |
 | 2 | CNB 只有 2 次编译机会，必须确保编译成功 | ✅ | 翻译功能不触发 CNB 全量编译（仅 lite-validate）；docs/translate.md 七节明确「不要触发 web_trigger」+ 建议先在 GitHub Actions 跑通再上 CNB |
 
+## 三c、v1.4.1 用户新增需求专项
+
+| # | 需求（用户原话要点） | 状态 | 落点 |
+|---|---|---|---|
+| 1 | 架构确认：浏览器先走后端，再通过后台配置连接翻译服务器 | ✅ | 客户端仅访问 POST /api/translate（JWT）；后端按后台配置的 provider 顺序连上游；密钥仅存服务端，浏览器拿不到 |
+| 2 | 后台配置时可配置多种接口和所有常用的翻译 API | ✅ | **15 种全矩阵**：google_free/edge_free/mymemory/libretranslate/lingva/deeplx/deepl/microsoft/baidu/youdao/tencent/aliyun/niutrans/yandex/openai_compat（免 Key + 开源自托管 + 官方免费额度 + LLM）+ 后台「翻译配置」面板（增删改排序 + 按类型动态凭据字段 + 一键测试 + 密钥脱敏/merge） |
+
 ## 四、待 CI/二期事项（诚实清单）
 
 1. **客户端编译产物**：三平台工作流 Fetch/补丁阶段已打通，完整编译需自托管

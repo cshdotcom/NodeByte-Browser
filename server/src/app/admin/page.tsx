@@ -15,7 +15,7 @@ type Stats = {
 
 function Shell() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'groups' | 'policy' | 'directives' | 'import' | 'translate' | 'files' | 'ext' | 'audit' | 'settings'>('stats');
   const [me, setMe] = useState<{ username: string; isAdmin: boolean } | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ function Shell() {
       <div className="container">
         <div className="tabs">
           {([['stats', t('overview')], ['users', t('users')], ['groups', t('groups')], ['policy', t('policy')],
-             ['directives', t('directives')], ['import', t('importCenter')],
+             ['directives', t('directives')], ['import', t('importCenter')], ['translate', t('translate')],
              ['files', t('files')], ['ext', t('extensions')], ['audit', t('audit')], ['settings', t('settings')]] as const).map(([k, label]) => (
             <div key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{label}</div>
           ))}
@@ -52,6 +52,7 @@ function Shell() {
         {tab === 'policy' && <PolicyPanel />}
         {tab === 'directives' && <DirectivesPanel />}
         {tab === 'import' && <ImportPanel />}
+        {tab === 'translate' && <TranslatePanel />}
         {tab === 'files' && <FilesPanel />}
         {tab === 'ext' && <ExtPanel />}
         {tab === 'audit' && <AuditPanel />}
@@ -616,6 +617,220 @@ function SettingsPanel() {
         }}>保存全局策略</button>
       </div>
       <p className="hint">SMTP 配置（smtp_config）由环境变量或此处 JSON 提供；WebSocket 信令与 SFU 为独立服务，通过反向代理暴露 wss://。</p>
+    </div>
+  );
+}
+
+/* =====================================================================
+   翻译配置（v1.4.1）：后台可配置多种翻译接口（15 种常用 API 全矩阵）
+   架构：浏览器 → NodeByte 后端 → 按 provider 顺序连上游（客户端拿不到密钥）
+   支持增删改排序、凭据字段按类型动态渲染、一键连通性测试
+   ===================================================================== */
+
+type ProviderMeta = { label: string; license: string; keyShape: 'none' | 'apiKey' | 'appIdKey' | 'keySecret' | 'keyModel' | 'keyRegion'; defaultEndpoint: string; freeTier: string };
+type ProviderRow = { provider: string; endpoint?: string; apiKey?: string; appId?: string; region?: string; model?: string; weight: number; enabled: boolean };
+type TranslateCfg = { settings: { enabled: boolean; providers: ProviderRow[]; cacheTtlHours: number; auditLog: boolean; defaultTarget: string }; meta: Record<string, ProviderMeta>; types: string[] };
+
+const LANG_TARGETS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'ar'];
+
+function TranslatePanel() {
+  const [cfg, setCfg] = useState<TranslateCfg | null>(null);
+  const [rows, setRows] = useState<ProviderRow[]>([]);
+  const [msg, setMsg] = useState('');
+  const [testing, setTesting] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<Record<number, { ok: boolean; detail: string; sample?: string; latencyMs?: number }>>({});
+
+  const load = useCallback(async () => {
+    const r = await api<TranslateCfg>('/api/admin/translate-config', { headers: bearerHeaders() });
+    if (r.code === 0 && r.data) {
+      setCfg(r.data);
+      setRows(r.data.settings?.providers ?? []);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!cfg) return <span className="spin" />;
+
+  const meta = cfg.meta ?? {};
+  const upd = (i: number, patch: Partial<ProviderRow>) => {
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  };
+  const move = (i: number, dir: -1 | 1) => {
+    setRows((rs) => {
+      const n = [...rs];
+      const j = i + dir;
+      if (j < 0 || j >= n.length) return n;
+      [n[i], n[j]] = [n[j], n[i]];
+      return n;
+    });
+  };
+
+  const addProvider = (type: string) => {
+    const m = meta[type];
+    const minWeight = rows.reduce((acc, r) => Math.min(acc, r.weight), 100);
+    setRows((rs) => [...rs, {
+      provider: type, endpoint: m?.defaultEndpoint ?? '', weight: Math.max(0, minWeight - 10), enabled: true,
+    }]);
+  };
+
+  const save = async () => {
+    const r = await api('/api/admin/translate-config', {
+      method: 'PUT', headers: bearerHeaders(),
+      json: {
+        ...cfg.settings,
+        providers: rows.map((r) => ({
+          ...r,
+          // 测试密钥输入框：空值 = 保留原密钥（后端 merge），'*' 占位不提交
+          apiKey: r.apiKey && r.apiKey.startsWith('••') ? undefined : (r.apiKey || undefined),
+        })),
+      },
+    });
+    setMsg(r.code === 0 ? `已保存（${rows.filter((r) => r.enabled).length} 个启用接口）` : r.message);
+    if (r.code === 0) load();
+  };
+
+  const testOne = async (i: number) => {
+    setTesting(i);
+    setTestResult((t) => ({ ...t, [i]: { ok: false, detail: '测试中…' } }));
+    const row = rows[i];
+    const r = await api<{ ok: boolean; detail: string; sample?: string; latencyMs?: number }>('/api/admin/translate-test', {
+      method: 'POST', headers: bearerHeaders(),
+      json: { ...row, apiKey: row.apiKey && row.apiKey.startsWith('••') ? undefined : row.apiKey },
+    });
+    setTestResult((t) => ({ ...t, [i]: r.code === 0 && r.data ? r.data : { ok: false, detail: r.message || '请求失败' } }));
+    setTesting(null);
+  };
+
+  const toggleGlobal = async (enabled: boolean) => {
+    setCfg((c) => (c ? { ...c, settings: { ...c.settings, enabled } } : c));
+  };
+
+  return (
+    <div className="card">
+      {msg && <div className="notice notice-ok">{msg}</div>}
+      <div className="card-title">翻译配置（浏览器 → 本后端 → 上游翻译接口）</div>
+      <p className="hint" style={{ marginBottom: 12 }}>
+        客户端永远只访问本后端 <code>/api/translate</code>，上游地址与密钥仅存服务端。
+        按「权重」从小到大依次尝试，首个成功即返回；前一个失败自动降级到下一个。
+        支持全部 15 种常用翻译 API；每条都可一键测试连通性。
+      </p>
+
+      <div className="row-between" style={{ marginBottom: 12 }}>
+        <div className="row">
+          <b>翻译总开关：</b>
+          <button className={`btn btn-sm ${cfg.settings.enabled ? 'btn-primary' : 'btn-ghost'}`} onClick={() => toggleGlobal(true)}>开启</button>
+          <button className={`btn btn-sm ${!cfg.settings.enabled ? 'btn-danger' : 'btn-ghost'}`} onClick={() => toggleGlobal(false)}>关闭</button>
+        </div>
+        <div className="row">
+          <span className="hint">默认目标语言</span>
+          <select className="input" style={{ width: 120 }} value={cfg.settings.defaultTarget}
+            onChange={(e) => setCfg((c) => (c ? { ...c, settings: { ...c.settings, defaultTarget: e.target.value } } : c))}>
+            {LANG_TARGETS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <span className="hint">缓存(小时)</span>
+          <input className="input" style={{ width: 90 }} type="number" value={cfg.settings.cacheTtlHours}
+            onChange={(e) => setCfg((c) => (c ? { ...c, settings: { ...c.settings, cacheTtlHours: Number(e.target.value) } } : c))} />
+          <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={cfg.settings.auditLog}
+              onChange={(e) => setCfg((c) => (c ? { ...c, settings: { ...c.settings, auditLog: e.target.checked } } : c))} />
+            记录翻译命中审计
+          </label>
+        </div>
+      </div>
+
+      {rows.map((row, i) => {
+        const m = meta[row.provider];
+        return (
+          <div key={`${row.provider}-${i}`} className="card" style={{ marginBottom: 8, padding: 12 }}>
+            <div className="row-between">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="row" style={{ flexWrap: 'wrap' }}>
+                  <select className="input" style={{ width: 250 }} value={row.provider}
+                    onChange={(e) => upd(i, { provider: e.target.value, endpoint: meta[e.target.value]?.defaultEndpoint ?? '' })}>
+                    {cfg.types.map((tp) => <option key={tp} value={tp}>{meta[tp]?.label ?? tp}</option>)}
+                  </select>
+                  <label className="hint" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input type="checkbox" checked={row.enabled} onChange={(e) => upd(i, { enabled: e.target.checked })} /> 启用
+                  </label>
+                  <span className="hint">权重</span>
+                  <input className="input" style={{ width: 70 }} type="number" value={row.weight}
+                    onChange={(e) => upd(i, { weight: Number(e.target.value) })} />
+                  {m && <span className="hint">{m.license} · {m.freeTier}</span>}
+                </div>
+                <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+                  <span className="hint">端点</span>
+                  <input className="input mono" style={{ flex: 1, minWidth: 220 }} placeholder={m?.defaultEndpoint ?? ''}
+                    value={row.endpoint ?? ''} onChange={(e) => upd(i, { endpoint: e.target.value })} />
+                  {m?.keyShape === 'apiKey' && (
+                    <>
+                      <span className="hint">API Key</span>
+                      <input className="input mono" style={{ width: 180 }} placeholder="sk-…"
+                        value={row.apiKey ?? ''} onChange={(e) => upd(i, { apiKey: e.target.value })} />
+                    </>
+                  )}
+                  {m?.keyShape === 'keyRegion' && (
+                    <>
+                      <span className="hint">Key</span>
+                      <input className="input mono" style={{ width: 160 }} value={row.apiKey ?? ''} onChange={(e) => upd(i, { apiKey: e.target.value })} />
+                      <span className="hint">区域</span>
+                      <input className="input" style={{ width: 110 }} placeholder="global/eastasia" value={row.region ?? ''} onChange={(e) => upd(i, { region: e.target.value })} />
+                    </>
+                  )}
+                  {m?.keyShape === 'appIdKey' && (
+                    <>
+                      <span className="hint">ID/APPID</span>
+                      <input className="input mono" style={{ width: 150 }} value={row.appId ?? ''} onChange={(e) => upd(i, { appId: e.target.value })} />
+                      <span className="hint">密钥</span>
+                      <input className="input mono" style={{ width: 150 }} value={row.apiKey ?? ''} onChange={(e) => upd(i, { apiKey: e.target.value })} />
+                    </>
+                  )}
+                  {m?.keyShape === 'keyModel' && (
+                    <>
+                      <span className="hint">Key</span>
+                      <input className="input mono" style={{ width: 150 }} value={row.apiKey ?? ''} onChange={(e) => upd(i, { apiKey: e.target.value })} />
+                      <span className="hint">模型</span>
+                      <input className="input mono" style={{ width: 150 }} placeholder="deepseek-chat" value={row.model ?? ''} onChange={(e) => upd(i, { model: e.target.value })} />
+                    </>
+                  )}
+                </div>
+                {testResult[i] && (
+                  <div className={`notice ${testResult[i].ok ? 'notice-ok' : 'notice-danger'}`} style={{ marginTop: 6 }}>
+                    {testResult[i].ok ? '✓ ' : '✗ '}{testResult[i].detail}
+                    {testResult[i].latencyMs != null && ` · ${testResult[i].latencyMs}ms`}
+                    {testResult[i].sample && ` · 样例：${testResult[i].sample}`}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 8 }}>
+                <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                <button className="btn btn-ghost btn-sm" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>↓</button>
+                <button className="btn btn-ghost btn-sm" disabled={testing === i} onClick={() => testOne(i)}>{testing === i ? '测试中' : '测试'}</button>
+                <button className="btn btn-danger btn-sm" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>删</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="row-between" style={{ marginTop: 10 }}>
+        <select className="input" style={{ width: 300 }} id="trAddType" defaultValue="">
+          <option value="" disabled>＋ 添加翻译接口…</option>
+          {cfg.types.filter((tp) => !rows.some((r) => r.provider === tp)).map((tp) => (
+            <option key={tp} value={tp}>{meta[tp]?.label ?? tp}</option>
+          ))}
+        </select>
+        <div className="row">
+          <button className="btn btn-ghost" onClick={() => {
+            const v = (document.getElementById('trAddType') as HTMLSelectElement).value;
+            if (v) addProvider(v);
+          }}>添加</button>
+          <button className="btn btn-primary" onClick={save}>保存配置</button>
+        </div>
+      </div>
+      <p className="hint" style={{ marginTop: 8 }}>
+        凭据加密说明：密钥仅存服务端 system_setting（数据库），随配置下发到浏览器端的只有「脱敏后的
+        provider 清单」（不含密钥）。测试按钮发送 "Hello, world! This is a test." → zh-CN，返回延迟与样例译文。
+        带 •• 的密钥表示已保存（留空保存即保留原密钥）。
+      </p>
     </div>
   );
 }

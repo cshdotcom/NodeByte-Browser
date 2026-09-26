@@ -189,23 +189,34 @@ progress { width:100%; height:6px; }
 <h2><span class="badge">翻译</span> 开源免费翻译 API（多供应商自动降级）</h2>
 <div class="card">
   <div class="f">
-    <label>翻译服务 / Translate provider</label>
+    <label>翻译服务 / Translate provider（服务端聚合，后台可配 15 种接口）</label>
     <div class="row">
-      <select id="trProvider" style="width:220px">
-        <option value="auto">自动（按权重依次尝试）</option>
-        <option value="libretranslate">LibreTranslate（开源 AGPL）</option>
-        <option value="lingva">Lingva Translate（开源 GPL）</option>
+      <select id="trProvider" style="width:260px">
+        <option value="auto">自动（按后台权重依次尝试）</option>
+        <option value="google_free">Google 免费端点（无需 Key）</option>
+        <option value="edge_free">Edge 免费翻译（匿名）</option>
         <option value="mymemory">MyMemory（免费配额）</option>
-        <option value="deeplx">DeepLX（自托管 MIT）</option>
+        <option value="libretranslate">LibreTranslate（开源，可自托管）</option>
+        <option value="lingva">Lingva Translate（开源）</option>
+        <option value="deeplx">DeepLX（自托管）</option>
+        <option value="deepl">DeepL 官方 Free</option>
+        <option value="microsoft">Azure 翻译</option>
+        <option value="baidu">百度翻译</option>
+        <option value="youdao">有道智云</option>
+        <option value="tencent">腾讯云 TMT</option>
+        <option value="aliyun">阿里云翻译</option>
+        <option value="niutrans">小牛翻译</option>
+        <option value="yandex">Yandex</option>
+        <option value="openai_compat">OpenAI 兼容 LLM</option>
       </select>
       <button class="btn" id="btnTrOpen">打开翻译面板</button>
       <button class="btn" id="btnTrPage">翻译当前页</button>
     </div>
     <p class="hint">
-      默认使用服务端聚合：LibreTranslate → Lingva → MyMemory → DeepLX 自动降级，无需付费 API Key。
-      管理员可在「后台 → 翻译配置」中切换自托管 LibreTranslate/DeepLX 实例或关闭功能（<code>NodeByteTranslateEnabled=false</code> 隐藏入口）。
-      「翻译当前页」会把当前网页正文发送到服务端翻译并替换显示（保留原页 DOM 结构，仅替换文本节点）。
-      单次上限 <code>NodeByteTranslateMaxChars</code>（默认 5000）。
+      架构：浏览器只请求本后端 /api/translate，后端再按后台「翻译配置」的接口顺序连接上游（密钥仅存服务端）。
+      默认梯队：Google 免费端点 → Edge 匿名端点 → MyMemory（全部无需 Key）；
+      管理员在后台可添加 DeepL/百度/有道/腾讯云/阿里云/小牛/Yandex/LLM 等 15 种接口、调整权重、一键测试。
+      <code>NodeByteTranslateEnabled=false</code> 隐藏入口；单次上限 <code>NodeByteTranslateMaxChars</code>（默认 5000）。
     </p>
   </div>
   <div class="f">
