@@ -1,6 +1,5 @@
 diff --git a/chrome/browser/nodebyte/sync/nodebyte_crypto.cc b/chrome/browser/nodebyte/sync/nodebyte_crypto.cc
 new file mode 100755
-index 0000000..37e8393
 --- /dev/null
 +++ b/chrome/browser/nodebyte/sync/nodebyte_crypto.cc
 @@ -0,0 +1,117 @@
@@ -123,7 +122,6 @@ index 0000000..37e8393
 +}  // namespace nodebyte::sync
 diff --git a/chrome/browser/nodebyte/sync/nodebyte_crypto.h b/chrome/browser/nodebyte/sync/nodebyte_crypto.h
 new file mode 100755
-index 0000000..afc417b
 --- /dev/null
 +++ b/chrome/browser/nodebyte/sync/nodebyte_crypto.h
 @@ -0,0 +1,47 @@
@@ -176,7 +174,6 @@ index 0000000..afc417b
 +#endif  // CHROME_BROWSER_NODEBYTE_SYNC_NODEBYTE_CRYPTO_H_
 diff --git a/chrome/browser/nodebyte/sync/nodebyte_sync_client.cc b/chrome/browser/nodebyte/sync/nodebyte_sync_client.cc
 new file mode 100755
-index 0000000..109155f
 --- /dev/null
 +++ b/chrome/browser/nodebyte/sync/nodebyte_sync_client.cc
 @@ -0,0 +1,142 @@
@@ -324,7 +321,6 @@ index 0000000..109155f
 +}  // namespace nodebyte::sync
 diff --git a/chrome/browser/nodebyte/sync/nodebyte_sync_client.h b/chrome/browser/nodebyte/sync/nodebyte_sync_client.h
 new file mode 100755
-index 0000000..ebbb195
 --- /dev/null
 +++ b/chrome/browser/nodebyte/sync/nodebyte_sync_client.h
 @@ -0,0 +1,101 @@

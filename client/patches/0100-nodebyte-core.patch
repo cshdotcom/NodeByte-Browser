@@ -1,6 +1,5 @@
 diff --git a/chrome/browser/nodebyte/BUILD.gn b/chrome/browser/nodebyte/BUILD.gn
 new file mode 100644
-index 0000000..4b478b1
 --- /dev/null
 +++ b/chrome/browser/nodebyte/BUILD.gn
 @@ -0,0 +1,38 @@
@@ -44,7 +43,6 @@ index 0000000..4b478b1
 +}
 diff --git a/chrome/browser/nodebyte/nodebyte_constants.h b/chrome/browser/nodebyte/nodebyte_constants.h
 new file mode 100755
-index 0000000..71d75d6
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_constants.h
 @@ -0,0 +1,130 @@
@@ -180,7 +178,6 @@ index 0000000..71d75d6
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_CONSTANTS_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_protocol.h b/chrome/browser/nodebyte/nodebyte_protocol.h
 new file mode 100755
-index 0000000..f0760a2
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_protocol.h
 @@ -0,0 +1,22 @@
@@ -208,7 +205,6 @@ index 0000000..f0760a2
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_PROTOCOL_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_protocol.cc b/chrome/browser/nodebyte/nodebyte_protocol.cc
 new file mode 100755
-index 0000000..df326ed
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_protocol.cc
 @@ -0,0 +1,33 @@
@@ -247,7 +243,6 @@ index 0000000..df326ed
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/nodebyte_branding.h b/chrome/browser/nodebyte/nodebyte_branding.h
 new file mode 100755
-index 0000000..4b560c4
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_branding.h
 @@ -0,0 +1,31 @@
@@ -284,7 +279,6 @@ index 0000000..4b560c4
 +#endif  // CHROME_BROWSER_NODEBYTE_NODEBYTE_BRANDING_H_
 diff --git a/chrome/browser/nodebyte/nodebyte_branding.cc b/chrome/browser/nodebyte/nodebyte_branding.cc
 new file mode 100755
-index 0000000..e3bb366
 --- /dev/null
 +++ b/chrome/browser/nodebyte/nodebyte_branding.cc
 @@ -0,0 +1,31 @@
@@ -321,7 +315,6 @@ index 0000000..e3bb366
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/mojo/nodebyte.mojom b/chrome/browser/nodebyte/mojo/nodebyte.mojom
 new file mode 100755
-index 0000000..6880403
 --- /dev/null
 +++ b/chrome/browser/nodebyte/mojo/nodebyte.mojom
 @@ -0,0 +1,129 @@

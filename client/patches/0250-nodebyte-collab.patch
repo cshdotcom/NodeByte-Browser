@@ -1,6 +1,5 @@
 diff --git a/chrome/browser/nodebyte/collab/collab_controller.cc b/chrome/browser/nodebyte/collab/collab_controller.cc
 new file mode 100644
-index 0000000..6068b6e
 --- /dev/null
 +++ b/chrome/browser/nodebyte/collab/collab_controller.cc
 @@ -0,0 +1,318 @@
@@ -324,7 +323,6 @@ index 0000000..6068b6e
 +}  // namespace nodebyte
 diff --git a/chrome/browser/nodebyte/collab/collab_controller.h b/chrome/browser/nodebyte/collab/collab_controller.h
 new file mode 100644
-index 0000000..6543b2b
 --- /dev/null
 +++ b/chrome/browser/nodebyte/collab/collab_controller.h
 @@ -0,0 +1,72 @@

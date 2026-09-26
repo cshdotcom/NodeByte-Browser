@@ -51,6 +51,9 @@ for name in "${!PATCH_GROUPS[@]}"; do
     # 与空树的 diff = 新增文件补丁（git apply --3way 可稳定应用：目标文件不存在）
     git diff --binary "${EMPTY_TREE}" -- "${rel}" >> "${out_file}" || true
   done
+  # 跨 git 版本稳定性：剥离 index 元数据行（blob 摘要与 git 版本/环境相关，
+  # 剥离后补丁字节跨环境一致，CI 一致性校验才可复现；新增文件补丁不依赖 index）
+  sed -i '/^index [0-9a-f]\{7,\}\.\.[0-9a-f]\{7,\}\( [0-9]\{4,\}\)\?$/d' "${out_file}" || true
   if [ ! -s "${out_file}" ]; then
     echo "error: empty patch ${name}" >&2
     exit 1
